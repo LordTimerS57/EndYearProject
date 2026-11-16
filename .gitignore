@@ -1,0 +1,6 @@
+.vs/
+backend/.vs/
+**/.vs/
+backend/bin/
+backend/obj/
+front/node_modules/
