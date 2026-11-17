@@ -14,6 +14,6 @@ public class Utilisateur
     public string Type { get; set; } = string.Empty;
     public string MotDePasseHash { get; set; } = string.Empty;
     public string Fonction { get; set; } = string.Empty;
-    public string Statut { get; set; } = "Actif";
+    public string Statut { get; set; } = "En attente";
     public DateTime DateCreation { get; set; } = DateTime.UtcNow;
 }
