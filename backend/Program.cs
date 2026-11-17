@@ -105,17 +105,8 @@ app.MapGet("/debug/routes", (
         .ToList();
 });
 
-// Route de diagnostic
-app.MapGet("/test", () => Results.Ok("BACKEND MESSAGERIE OK"));
+//backend
+app.MapGet("/test", () => "BACKEND MESSAGERIE OK");
 
-// Afficher les routes disponibles
-app.MapGet("/debug/routes", (
-    IEnumerable<EndpointDataSource> sources) =>
-{
-    return sources
-        .SelectMany(s => s.Endpoints)
-        .Select(e => e.DisplayName)
-        .ToList();
-});
 
 app.Run();
