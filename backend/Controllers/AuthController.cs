@@ -30,11 +30,7 @@ public class AuthController : ControllerBase
         _passwordHasher = new PasswordHasher<Utilisateur>();
     }
 
-    // ==========================================
     // INSCRIPTION
-    // POST /api/auth/inscription
-    // ==========================================
-
     [HttpPost("inscription")]
     public async Task<IActionResult> Inscription(
         [FromBody] InscriptionDto dto)
@@ -42,7 +38,6 @@ public class AuthController : ControllerBase
         var matricule = dto.Matricule.Trim();
         var email = dto.Email.Trim().ToLowerInvariant();
 
-        // Vérifier les champs obligatoires
         if (string.IsNullOrWhiteSpace(matricule) ||
             string.IsNullOrWhiteSpace(dto.Nom) ||
             string.IsNullOrWhiteSpace(dto.Prenom) ||
@@ -54,7 +49,6 @@ public class AuthController : ControllerBase
             });
         }
 
-        // Vérifier si le compte existe déjà
         var existe = await _context.Utilisateurs
             .AnyAsync(u =>
                 u.Matricule == matricule ||
@@ -68,7 +62,6 @@ public class AuthController : ControllerBase
             });
         }
 
-        // Créer le nouvel utilisateur
         var utilisateur = new Utilisateur
         {
             Matricule = matricule,
@@ -76,22 +69,18 @@ public class AuthController : ControllerBase
             Prenom = dto.Prenom.Trim(),
             Email = email,
             Fonction = dto.Fonction.Trim(),
-
-            // Valeurs imposées par le serveur
             Type = "Utilisateur",
             Statut = "En attente",
 
             DateCreation = DateTime.UtcNow
         };
 
-        // Hacher le mot de passe
         utilisateur.MotDePasseHash =
             _passwordHasher.HashPassword(
                 utilisateur,
                 dto.MotDePasse
             );
 
-        // Enregistrer dans PostgreSQL
         _context.Utilisateurs.Add(utilisateur);
 
         try
@@ -114,10 +103,7 @@ public class AuthController : ControllerBase
         });
     }
 
-    // ==========================================
     // CONNEXION
-    // POST /api/auth/connexion
-    // ==========================================
 
     [HttpPost("connexion")]
     public async Task<IActionResult> Connexion(
@@ -125,7 +111,6 @@ public class AuthController : ControllerBase
     {
         var email = dto.Email.Trim().ToLowerInvariant();
 
-        // Rechercher l'utilisateur
         var utilisateur = await _context.Utilisateurs
             .FirstOrDefaultAsync(u => u.Email == email);
 
@@ -137,7 +122,6 @@ public class AuthController : ControllerBase
             });
         }
 
-        // Vérifier le mot de passe
         var verification =
             _passwordHasher.VerifyHashedPassword(
                 utilisateur,
@@ -153,7 +137,6 @@ public class AuthController : ControllerBase
             });
         }
 
-        // Vérifier le statut du compte
         if (utilisateur.Statut != "Actif")
         {
             return StatusCode(403, new
@@ -173,7 +156,6 @@ public class AuthController : ControllerBase
             });
         }
 
-        // Récupérer la configuration JWT
         var jwtKey = _configuration["Jwt:Key"]
             ?? throw new InvalidOperationException(
                 "Clé JWT non configurée.");
@@ -186,7 +168,6 @@ public class AuthController : ControllerBase
             ?? throw new InvalidOperationException(
                 "Audience JWT non configurée.");
 
-        // Créer les informations du JWT
         var claims = new List<Claim>
         {
             new Claim(
@@ -202,7 +183,6 @@ public class AuthController : ControllerBase
             new Claim("role", utilisateur.Type)
         };
 
-        // Signer le JWT
         var key = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(jwtKey)
         );
@@ -212,7 +192,6 @@ public class AuthController : ControllerBase
             SecurityAlgorithms.HmacSha256
         );
 
-        // Générer un JWT valable 2 heures
         var token = new JwtSecurityToken(
             issuer: jwtIssuer,
             audience: jwtAudience,
@@ -224,7 +203,6 @@ public class AuthController : ControllerBase
         var tokenString =
             new JwtSecurityTokenHandler().WriteToken(token);
 
-        // Retourner les informations de connexion
         return Ok(new
         {
             message = "Connexion réussie.",
