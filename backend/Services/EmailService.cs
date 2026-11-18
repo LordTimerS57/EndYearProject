@@ -50,7 +50,6 @@ public class EmailService : IEmailService
             _configuration["Smtp:FromName"]
             ?? "Messagerie Interne";
 
-        // Construire le message
         var message = new MimeMessage();
 
         message.From.Add(
@@ -76,9 +75,6 @@ public class EmailService : IEmailService
             Votre compte ne peut donc pas être utilisé
             pour accéder à la plateforme.
 
-            Pour toute information complémentaire,
-            veuillez contacter l'administrateur.
-
             Cordialement,
 
             L'équipe d'administration
@@ -86,7 +82,6 @@ public class EmailService : IEmailService
             """
         };
 
-        // Connexion sécurisée à Gmail
         using var client = new SmtpClient();
 
         client.Timeout = 15000;
@@ -104,7 +99,6 @@ public class EmailService : IEmailService
             cancellationToken
         );
 
-        // Envoyer le message
         await client.SendAsync(
             message,
             cancellationToken
