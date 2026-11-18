@@ -5,6 +5,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using backend.Data;
 using Microsoft.AspNetCore.Routing;
+using backend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -63,6 +64,19 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("ReactFrontend", policy =>
+    {
+        policy.WithOrigins("http://localhost:5173")
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
+// Service de notification email
+builder.Services.AddScoped<IEmailService, EmailService>();
+
 var app = builder.Build();
 
 // Vérification OpenAPI
@@ -73,7 +87,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// Authentification et autorisation
+app.UseCors("ReactFrontend");
+
 app.UseAuthentication();
 app.UseAuthorization();
 
