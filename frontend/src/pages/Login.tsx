@@ -25,14 +25,12 @@ export default function Login() {
         motDePasse,
       });
 
-      // Stockage temporaire pour ce prototype.
-      // À remplacer par une gestion de session plus sûre.
       sessionStorage.setItem("token", result.token);
 
       if (result.utilisateur.type === "Administrateur") {
-  navigate("/admin/utilisateurs");
+  navigate("/admin/utilisateurs", { replace: true });
 } else {
-  navigate("/accueil");
+  navigate("/boite-reception", { replace: true });
 }
     } catch (error) {
       if (axios.isAxiosError(error)) {

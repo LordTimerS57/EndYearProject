@@ -1,6 +1,36 @@
+
+# ==========================================
+# VISUAL STUDIO / VS CODE
+# ==========================================
+
 .vs/
-backend/.vs/
 **/.vs/
-backend/bin/
-backend/obj/
-front/node_modules/
+
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+**/bin/
+**/obj/
+
+**/appsettings.Development.json
+**/appsettings.Production.json
+**/appsettings.json
+
+**/test.http
+
+**/node_modules/
+**/dist/
+**/coverage/
+
+**/.env
+**/.env.*
+!**/.env.example
+
+*.log
+*.tmp
+*.bak
+
+.DS_Store
+Thumbs.db

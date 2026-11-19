@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Login from "./pages/Login";
 import Inscription from "./pages/Inscription";
 import AdminUtilisateurs from "./pages/AdminUtilisateurs";
+import BoiteReception from "./pages/BoiteReception";
 function Accueil() {
   return (
     <div className="auth-page">
@@ -41,6 +42,16 @@ export default function App() {
               : <Navigate to="/login" replace />
           }
         />
+        <Route
+  path="/boite-reception"
+  element={
+    sessionStorage.getItem("token") ? (
+      <BoiteReception />
+    ) : (
+      <Navigate to="/login" replace />
+    )
+  }
+/>
         <Route
   path="/admin/utilisateurs"
   element={
