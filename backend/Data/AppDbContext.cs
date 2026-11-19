@@ -16,6 +16,8 @@ public class AppDbContext : DbContext
     public DbSet<Recepteur> Recepteurs => Set<Recepteur>();
     public DbSet<PieceJointe> PiecesJointes => Set<PieceJointe>();
     public DbSet<TransfertMail> TransfertsMail => Set<TransfertMail>();
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
