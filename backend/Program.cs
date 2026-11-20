@@ -64,6 +64,8 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
+builder.Services.AddScoped<FileStorageService>();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("ReactFrontend", policy =>

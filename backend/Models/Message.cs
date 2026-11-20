@@ -20,4 +20,9 @@ public class Message
     public long? IdMessParent { get; set; }
     public Message? MessageParent { get; set; }
     public ICollection<Message> Reponses { get; set; } = new List<Message>();
+
+    public ICollection<PieceJointe> PiecesJointes { get; set; } = new List<PieceJointe>();
+    public ICollection<Recepteur> Recepteurs { get; set; } = new List<Recepteur>();
+
+
 }

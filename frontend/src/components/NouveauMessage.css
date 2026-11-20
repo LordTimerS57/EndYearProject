@@ -116,3 +116,59 @@
     border-radius: 0;
   }
 }
+
+
+.destinataires-wrapper {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.destinataires-wrapper .destinataires-champ {
+  margin-bottom: 0;
+}
+
+.suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 10;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.suggestions ul {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.suggestion {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.suggestion.actif {
+  background: #e8f0fe;
+}
+
+.suggestion-nom {
+  font-weight: 500;
+}
+
+.suggestion-detail {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.suggestions-info {
+  padding: 10px 12px;
+  color: #666;
+  font-size: 0.9rem;
+}

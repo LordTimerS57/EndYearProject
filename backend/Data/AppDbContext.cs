@@ -25,10 +25,27 @@ public class AppDbContext : DbContext
 
         // Utilisateur -> Message
         modelBuilder.Entity<Message>()
+            .HasOne(m => m.MessageParent)
+            .WithMany(m => m.Reponses)
+            .HasForeignKey(m => m.IdMessParent)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Message>()
+            .HasOne(m => m.Conversation)
+            .WithMany(c => c.Messages)
+            .HasForeignKey(m => m.IdConv);
+
+        modelBuilder.Entity<Message>()
             .HasOne(m => m.Expediteur)
-            .WithMany()
+            .WithMany()                      
             .HasForeignKey(m => m.MatriculeExpediteur)
             .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Message>()
+            .HasMany(m => m.Recepteurs)
+            .WithOne(r => r.Message)
+            .HasForeignKey(r => r.IdMess)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // Utilisateur -> Recepteur
         modelBuilder.Entity<Recepteur>()
@@ -36,13 +53,6 @@ public class AppDbContext : DbContext
             .WithMany()
             .HasForeignKey(r => r.Matricule)
             .OnDelete(DeleteBehavior.Restrict);
-
-        // Message -> Recepteur
-        modelBuilder.Entity<Recepteur>()
-            .HasOne(r => r.Message)
-            .WithMany()
-            .HasForeignKey(r => r.IdMess)
-            .OnDelete(DeleteBehavior.Cascade);
 
         // Message -> PieceJointe
         modelBuilder.Entity<PieceJointe>()

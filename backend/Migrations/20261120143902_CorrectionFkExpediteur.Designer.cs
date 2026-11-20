@@ -12,8 +12,8 @@ using backend.Data;
 namespace backend.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261119224725_ConversationTableAndChangeMessage")]
-    partial class ConversationTableAndChangeMessage
+    [Migration("20261120143902_CorrectionFkExpediteur")]
+    partial class CorrectionFkExpediteur
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -57,9 +57,6 @@ namespace backend.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<long>("ConversationIdConv")
-                        .HasColumnType("bigint");
-
                     b.Property<DateTime?>("DateEnvoi")
                         .HasColumnType("timestamp with time zone");
 
@@ -73,20 +70,17 @@ namespace backend.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<long?>("MessageParentIdMess")
-                        .HasColumnType("bigint");
-
                     b.Property<string>("Statut")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("IdMess");
 
-                    b.HasIndex("ConversationIdConv");
+                    b.HasIndex("IdConv");
+
+                    b.HasIndex("IdMessParent");
 
                     b.HasIndex("MatriculeExpediteur");
-
-                    b.HasIndex("MessageParentIdMess");
 
                     b.ToTable("Messages");
                 });
@@ -99,7 +93,7 @@ namespace backend.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("IdPiece"));
 
-                    b.Property<string>("BucketName")
+                    b.Property<string>("CheminFichier")
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -107,6 +101,9 @@ namespace backend.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<long>("IdMess")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("MessageIdMess")
                         .HasColumnType("bigint");
 
                     b.Property<string>("NomFichier")
@@ -128,6 +125,8 @@ namespace backend.Migrations
 
                     b.HasIndex("IdMess");
 
+                    b.HasIndex("MessageIdMess");
+
                     b.ToTable("PiecesJointes");
                 });
 
@@ -146,9 +145,14 @@ namespace backend.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<long?>("MessageIdMess")
+                        .HasColumnType("bigint");
+
                     b.HasKey("IdRecep");
 
                     b.HasIndex("Matricule");
+
+                    b.HasIndex("MessageIdMess");
 
                     b.HasIndex("IdMess", "Matricule")
                         .IsUnique();
@@ -231,19 +235,20 @@ namespace backend.Migrations
                 {
                     b.HasOne("backend.Models.Conversation", "Conversation")
                         .WithMany("Messages")
-                        .HasForeignKey("ConversationIdConv")
+                        .HasForeignKey("IdConv")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("backend.Models.Message", "MessageParent")
+                        .WithMany("Reponses")
+                        .HasForeignKey("IdMessParent")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("backend.Models.Utilisateur", "Expediteur")
                         .WithMany()
                         .HasForeignKey("MatriculeExpediteur")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.HasOne("backend.Models.Message", "MessageParent")
-                        .WithMany("Reponses")
-                        .HasForeignKey("MessageParentIdMess");
 
                     b.Navigation("Conversation");
 
@@ -259,6 +264,10 @@ namespace backend.Migrations
                         .HasForeignKey("IdMess")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("backend.Models.Message", null)
+                        .WithMany("PiecesJointes")
+                        .HasForeignKey("MessageIdMess");
 
                     b.Navigation("Message");
                 });
@@ -276,6 +285,10 @@ namespace backend.Migrations
                         .HasForeignKey("Matricule")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("backend.Models.Message", null)
+                        .WithMany("Recepteurs")
+                        .HasForeignKey("MessageIdMess");
 
                     b.Navigation("Message");
 
@@ -308,6 +321,10 @@ namespace backend.Migrations
 
             modelBuilder.Entity("backend.Models.Message", b =>
                 {
+                    b.Navigation("PiecesJointes");
+
+                    b.Navigation("Recepteurs");
+
                     b.Navigation("Reponses");
                 });
 #pragma warning restore 612, 618

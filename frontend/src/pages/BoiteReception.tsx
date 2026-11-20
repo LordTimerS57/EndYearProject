@@ -1,24 +1,24 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   getMessagesReception,
+  envoyerMessage,
   type MessageReception,
+  type EnvoyerMessageData,
 } from "../services/messageService";
 import "./BoiteReception.css";
 import NouveauMessage from "../components/NouveauMessage";
+import ApercuFichier from "../components/ApercuFichier";
 
 export default function BoiteReception() {
   const navigate = useNavigate();
 
   const [messages, setMessages] = useState<MessageReception[]>([]);
-  const [selection, setSelection] =
-    useState<MessageReception | null>(null);
-
+  const [selection, setSelection] = useState<MessageReception | null>(null);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
-  const [nouveauMessageOuvert, setNouveauMessageOuvert] =
-  useState(false);
+  const [nouveauMessageOuvert, setNouveauMessageOuvert] = useState(false);
+
   async function chargerMessages() {
     setChargement(true);
     setErreur("");
@@ -33,67 +33,78 @@ export default function BoiteReception() {
     }
   }
 
-  
-
   useEffect(() => {
-  let actif = true;
+    let actif = true;
 
-  async function chargerAuDemarrage() {
-    try {
-      const data = await getMessagesReception();
-
-      if (actif) {
-        setMessages(data);
-      }
-    } catch {
-      if (actif) {
-        setErreur("Impossible de charger les messages.");
-      }
-    } finally {
-      if (actif) {
-        setChargement(false);
+    async function chargerAuDemarrage() {
+      try {
+        const data = await getMessagesReception();
+        if (actif) {
+          setMessages(data);
+        }
+      } catch {
+        if (actif) {
+          setErreur("Impossible de charger les messages.");
+        }
+      } finally {
+        if (actif) {
+          setChargement(false);
+        }
       }
     }
-  }
 
-  void chargerAuDemarrage();
+    void chargerAuDemarrage();
 
-  return () => {
-    actif = false;
-  };
-}, []);
+    return () => {
+      actif = false;
+    };
+  }, []);
 
   function deconnexion() {
     sessionStorage.removeItem("token");
     navigate("/login", { replace: true });
   }
 
+  // ---------------------------------------------------------
+  // Envoi d'un message (intégration avec l'API)
+  // ---------------------------------------------------------
+ async function gererEnvoi(data: EnvoyerMessageData) {
+  try {
+    // On stocke le résultat
+    const resultat = await envoyerMessage(data);
+    
+    setNouveauMessageOuvert(false);
+    setSelection(null);
+    await chargerMessages();
+
+    // ON RETOURNE LE RESULTAT POUR QUE NouveauMessage PUISSE ENVOYER LES FICHIERS
+    return resultat; 
+  } catch (err: any) {
+    const msg = err.response?.data?.message || "Erreur lors de l'envoi du message.";
+    throw new Error(msg);
+  }
+}
+
   return (
     <div className="mail-layout">
       <aside className="mail-sidebar">
         <h2>Messagerie</h2>
 
-       <button
-            className="mail-compose"
-            onClick={() => setNouveauMessageOuvert(true)}
+        <button
+          className="mail-compose"
+          onClick={() => setNouveauMessageOuvert(true)}
         >
-        + Nouveau message
+          + Nouveau message
         </button>
 
         <nav>
-          <button className="mail-nav-active">
-            Boîte de réception
-          </button>
-
+          <button className="mail-nav-active">Boîte de réception</button>
           <button disabled>Messages envoyés</button>
           <button disabled>Archives</button>
           <button disabled>Corbeille</button>
         </nav>
 
-        <button
-          className="mail-logout"
-          onClick={deconnexion}
-        >
+        <button className="mail-logout" onClick={deconnexion}>
           Déconnexion
         </button>
       </aside>
@@ -101,34 +112,25 @@ export default function BoiteReception() {
       <main className="mail-main">
         <header className="mail-header">
           <h2>Boîte de réception</h2>
-
-          <button onClick={chargerMessages}>
-            Actualiser
-          </button>
+          <button onClick={chargerMessages}>Actualiser</button>
         </header>
 
-        {erreur && (
-          <p className="mail-error">{erreur}</p>
-        )}
+        {erreur && <p className="mail-error">{erreur}</p>}
 
         {chargement ? (
-          <p className="mail-empty">
-            Chargement des messages...
-          </p>
+          <p className="mail-empty">Chargement des messages...</p>
         ) : messages.length === 0 ? (
-          <p className="mail-empty">
-            Votre boîte de réception est vide.
-          </p>
+          <p className="mail-empty">Votre boîte de réception est vide.</p>
         ) : (
           <div className="mail-content">
             <section className="mail-list">
               {messages.map((message) => (
                 <button
-                  key={message.id}
+                  key={message.idMess} // <-- Modifié : idMess au lieu de id
                   className={
                     "mail-item " +
-                    (!message.estLu ? "mail-unread " : "") +
-                    (selection?.id === message.id
+                    (message.statut !== "Lu" ? "mail-unread " : "") + // <-- Modifié : statut au lieu de estLu
+                    (selection?.idMess === message.idMess // <-- Modifié
                       ? "mail-selected"
                       : "")
                   }
@@ -136,21 +138,15 @@ export default function BoiteReception() {
                 >
                   <div className="mail-item-top">
                     <strong>
-                      {message.expediteur.prenom}{" "}
-                      {message.expediteur.nom}
+                      {message.expediteur.prenom} {message.expediteur.nom}
                     </strong>
-
                     <small>
-                      {new Date(
-                        message.dateEnvoi
-                      ).toLocaleDateString("fr-FR")}
+                      {message.dateEnvoi
+                        ? new Date(message.dateEnvoi).toLocaleDateString("fr-FR")
+                        : ""}
                     </small>
                   </div>
-
-                  <div className="mail-subject">
-                    {message.objet}
-                  </div>
-
+                  <div className="mail-subject">{message.objet}</div>
                   <p>{message.contenu}</p>
                 </button>
               ))}
@@ -160,23 +156,35 @@ export default function BoiteReception() {
               {selection ? (
                 <>
                   <h2>{selection.objet}</h2>
-
                   <p>
-                    <strong>De :</strong>{" "}
-                    {selection.expediteur.prenom}{" "}
+                    <strong>De :</strong> {selection.expediteur.prenom}{" "}
                     {selection.expediteur.nom}
                   </p>
-
                   <p>
-                    <strong>Email :</strong>{" "}
-                    {selection.expediteur.email}
+                    <strong>Email :</strong> {selection.expediteur.email}
                   </p>
+
+                  {selection.piecesJointes && selection.piecesJointes.length > 0 && (
+                    <div style={{ marginTop: "20px", borderTop: "1px solid #eee", paddingTop: "10px" }}>
+                      <h4>Pièces jointes ({selection.piecesJointes.length})</h4>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                        {selection.piecesJointes.map((pj) => (
+                          <ApercuFichier key={pj.idPiece} piece={pj} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <hr />
+                  <p className="mail-body">{selection.contenu}</p>
 
-                  <p className="mail-body">
-                    {selection.contenu}
-                  </p>
+                  {/* Bouton pour répondre */}
+                  <button 
+                    className="mail-reply-btn"
+                    onClick={() => setNouveauMessageOuvert(true)}
+                  >
+                    Répondre
+                  </button>
                 </>
               ) : (
                 <p className="mail-empty">
@@ -187,17 +195,16 @@ export default function BoiteReception() {
           </div>
         )}
       </main>
-      {nouveauMessageOuvert && (
-  <NouveauMessage
-    onClose={() => setNouveauMessageOuvert(false)}
-    onEnvoyer={async (message) => {
-      console.log("Message à envoyer :", message);
 
-      // À remplacer par l'appel API ASP.NET Core.
-      throw new Error("API d'envoi non configurée.");
-    }}
-  />
-)}
+      {nouveauMessageOuvert && (
+        <NouveauMessage
+          onClose={() => setNouveauMessageOuvert(false)}
+          onEnvoyer={gererEnvoi}
+          // On peut passer l'objet et l'idMessParent si on répond à un message
+          initialObjet={selection?.objet}
+          initialIdMessParent={selection?.idMess} 
+        />
+      )}
     </div>
   );
 }

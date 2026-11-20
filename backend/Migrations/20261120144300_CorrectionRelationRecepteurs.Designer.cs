@@ -12,8 +12,8 @@ using backend.Data;
 namespace backend.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261117201308_InitialCreate")]
-    partial class InitialCreate
+    [Migration("20261120144300_CorrectionRelationRecepteurs")]
+    partial class CorrectionRelationRecepteurs
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -24,6 +24,26 @@ namespace backend.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("backend.Models.Conversation", b =>
+                {
+                    b.Property<long>("IdConv")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("IdConv"));
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Objet")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("IdConv");
+
+                    b.ToTable("Conversations");
+                });
 
             modelBuilder.Entity("backend.Models.Message", b =>
                 {
@@ -40,11 +60,13 @@ namespace backend.Migrations
                     b.Property<DateTime?>("DateEnvoi")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("MatriculeExpediteur")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<long>("IdConv")
+                        .HasColumnType("bigint");
 
-                    b.Property<string>("Objet")
+                    b.Property<long?>("IdMessParent")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("MatriculeExpediteur")
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -53,6 +75,10 @@ namespace backend.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("IdMess");
+
+                    b.HasIndex("IdConv");
+
+                    b.HasIndex("IdMessParent");
 
                     b.HasIndex("MatriculeExpediteur");
 
@@ -67,7 +93,7 @@ namespace backend.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("IdPiece"));
 
-                    b.Property<string>("BucketName")
+                    b.Property<string>("CheminFichier")
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -75,6 +101,9 @@ namespace backend.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<long>("IdMess")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("MessageIdMess")
                         .HasColumnType("bigint");
 
                     b.Property<string>("NomFichier")
@@ -95,6 +124,8 @@ namespace backend.Migrations
                     b.HasKey("IdPiece");
 
                     b.HasIndex("IdMess");
+
+                    b.HasIndex("MessageIdMess");
 
                     b.ToTable("PiecesJointes");
                 });
@@ -197,13 +228,28 @@ namespace backend.Migrations
 
             modelBuilder.Entity("backend.Models.Message", b =>
                 {
+                    b.HasOne("backend.Models.Conversation", "Conversation")
+                        .WithMany("Messages")
+                        .HasForeignKey("IdConv")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("backend.Models.Message", "MessageParent")
+                        .WithMany("Reponses")
+                        .HasForeignKey("IdMessParent")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("backend.Models.Utilisateur", "Expediteur")
                         .WithMany()
                         .HasForeignKey("MatriculeExpediteur")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.Navigation("Conversation");
+
                     b.Navigation("Expediteur");
+
+                    b.Navigation("MessageParent");
                 });
 
             modelBuilder.Entity("backend.Models.PieceJointe", b =>
@@ -214,13 +260,17 @@ namespace backend.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("backend.Models.Message", null)
+                        .WithMany("PiecesJointes")
+                        .HasForeignKey("MessageIdMess");
+
                     b.Navigation("Message");
                 });
 
             modelBuilder.Entity("backend.Models.Recepteur", b =>
                 {
                     b.HasOne("backend.Models.Message", "Message")
-                        .WithMany()
+                        .WithMany("Recepteurs")
                         .HasForeignKey("IdMess")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -253,6 +303,20 @@ namespace backend.Migrations
                     b.Navigation("MessageOriginal");
 
                     b.Navigation("Transmetteur");
+                });
+
+            modelBuilder.Entity("backend.Models.Conversation", b =>
+                {
+                    b.Navigation("Messages");
+                });
+
+            modelBuilder.Entity("backend.Models.Message", b =>
+                {
+                    b.Navigation("PiecesJointes");
+
+                    b.Navigation("Recepteurs");
+
+                    b.Navigation("Reponses");
                 });
 #pragma warning restore 612, 618
         }

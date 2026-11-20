@@ -10,7 +10,7 @@ public class PieceJointe
 
     public long IdMess { get; set; }
     public string NomFichier { get; set; } = string.Empty;
-    public string BucketName { get; set; } = string.Empty;
+    public string CheminFichier { get; set; } = string.Empty;
     public string ObjectKey { get; set; } = string.Empty;
     public string TypeMime { get; set; } = string.Empty;
     public long TailleFichier { get; set; }
