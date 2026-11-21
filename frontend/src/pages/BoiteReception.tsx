@@ -1,210 +1,128 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   getMessagesReception,
-  envoyerMessage,
+  type Dossier,
   type MessageReception,
-  type EnvoyerMessageData,
 } from "../services/messageService";
-import "./BoiteReception.css";
-import NouveauMessage from "../components/NouveauMessage";
-import ApercuFichier from "../components/ApercuFichier";
+import { useMessagerie } from "./MessagerieContext";
 
-export default function BoiteReception() {
+const TITRES: Record<Dossier, string> = {
+  boite: "Boîte de réception",
+  archive: "Archives",
+  corbeille: "Corbeille",
+};
+
+const MESSAGES_VIDES: Record<Dossier, string> = {
+  boite: "Votre boîte de réception est vide.",
+  archive: "Aucun message archivé.",
+  corbeille: "La corbeille est vide.",
+};
+
+interface ConversationResume {
+  idConv: number;
+  dernier: MessageReception; // message le plus récent du fil
+  nombre: number;
+}
+
+interface Props {
+  dossier?: Dossier;
+}
+
+// Page : liste des conversations d'un dossier (boîte, archives, corbeille)
+export default function BoiteReception({ dossier = "boite" }: Props) {
   const navigate = useNavigate();
+  const { version } = useMessagerie();
 
   const [messages, setMessages] = useState<MessageReception[]>([]);
-  const [selection, setSelection] = useState<MessageReception | null>(null);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
-  const [nouveauMessageOuvert, setNouveauMessageOuvert] = useState(false);
-
-  async function chargerMessages() {
-    setChargement(true);
-    setErreur("");
-
-    try {
-      const data = await getMessagesReception();
-      setMessages(data);
-    } catch {
-      setErreur("Impossible de charger les messages.");
-    } finally {
-      setChargement(false);
-    }
-  }
+  const [recharge, setRecharge] = useState(0);
 
   useEffect(() => {
     let actif = true;
 
-    async function chargerAuDemarrage() {
+    async function charger() {
+      setChargement(true);
+      setErreur("");
+
       try {
-        const data = await getMessagesReception();
-        if (actif) {
-          setMessages(data);
-        }
+        const data = await getMessagesReception(dossier);
+        if (actif) setMessages(data);
       } catch {
-        if (actif) {
-          setErreur("Impossible de charger les messages.");
-        }
+        if (actif) setErreur("Impossible de charger les messages.");
       } finally {
-        if (actif) {
-          setChargement(false);
-        }
+        if (actif) setChargement(false);
       }
     }
 
-    void chargerAuDemarrage();
+    void charger();
 
     return () => {
       actif = false;
     };
-  }, []);
+  }, [dossier, version, recharge]);
 
-  function deconnexion() {
-    sessionStorage.removeItem("token");
-    navigate("/login", { replace: true });
-  }
+  // Un seul élément par conversation (comme Gmail).
+  // L'API renvoie les messages du plus récent au plus ancien :
+  // le premier rencontré est donc le dernier du fil.
+  const conversations = useMemo(() => {
+    const map = new Map<number, ConversationResume>();
 
-  // ---------------------------------------------------------
-  // Envoi d'un message (intégration avec l'API)
-  // ---------------------------------------------------------
- async function gererEnvoi(data: EnvoyerMessageData) {
-  try {
-    // On stocke le résultat
-    const resultat = await envoyerMessage(data);
-    
-    setNouveauMessageOuvert(false);
-    setSelection(null);
-    await chargerMessages();
+    for (const m of messages) {
+      const existante = map.get(m.idConv);
+      if (!existante) {
+        map.set(m.idConv, { idConv: m.idConv, dernier: m, nombre: 1 });
+      } else {
+        existante.nombre++;
+      }
+    }
 
-    // ON RETOURNE LE RESULTAT POUR QUE NouveauMessage PUISSE ENVOYER LES FICHIERS
-    return resultat; 
-  } catch (err: any) {
-    const msg = err.response?.data?.message || "Erreur lors de l'envoi du message.";
-    throw new Error(msg);
-  }
-}
+    return Array.from(map.values());
+  }, [messages]);
 
   return (
-    <div className="mail-layout">
-      <aside className="mail-sidebar">
-        <h2>Messagerie</h2>
+    <>
+      <header className="mail-header">
+        <h2>{TITRES[dossier]}</h2>
+        <button onClick={() => setRecharge((r) => r + 1)}>Actualiser</button>
+      </header>
 
-        <button
-          className="mail-compose"
-          onClick={() => setNouveauMessageOuvert(true)}
-        >
-          + Nouveau message
-        </button>
+      {erreur && <p className="mail-error">{erreur}</p>}
 
-        <nav>
-          <button className="mail-nav-active">Boîte de réception</button>
-          <button disabled>Messages envoyés</button>
-          <button disabled>Archives</button>
-          <button disabled>Corbeille</button>
-        </nav>
-
-        <button className="mail-logout" onClick={deconnexion}>
-          Déconnexion
-        </button>
-      </aside>
-
-      <main className="mail-main">
-        <header className="mail-header">
-          <h2>Boîte de réception</h2>
-          <button onClick={chargerMessages}>Actualiser</button>
-        </header>
-
-        {erreur && <p className="mail-error">{erreur}</p>}
-
-        {chargement ? (
-          <p className="mail-empty">Chargement des messages...</p>
-        ) : messages.length === 0 ? (
-          <p className="mail-empty">Votre boîte de réception est vide.</p>
-        ) : (
-          <div className="mail-content">
-            <section className="mail-list">
-              {messages.map((message) => (
-                <button
-                  key={message.idMess} // <-- Modifié : idMess au lieu de id
-                  className={
-                    "mail-item " +
-                    (message.statut !== "Lu" ? "mail-unread " : "") + // <-- Modifié : statut au lieu de estLu
-                    (selection?.idMess === message.idMess // <-- Modifié
-                      ? "mail-selected"
-                      : "")
-                  }
-                  onClick={() => setSelection(message)}
-                >
-                  <div className="mail-item-top">
-                    <strong>
-                      {message.expediteur.prenom} {message.expediteur.nom}
-                    </strong>
-                    <small>
-                      {message.dateEnvoi
-                        ? new Date(message.dateEnvoi).toLocaleDateString("fr-FR")
-                        : ""}
-                    </small>
-                  </div>
-                  <div className="mail-subject">{message.objet}</div>
-                  <p>{message.contenu}</p>
-                </button>
-              ))}
-            </section>
-
-            <section className="mail-reader">
-              {selection ? (
-                <>
-                  <h2>{selection.objet}</h2>
-                  <p>
-                    <strong>De :</strong> {selection.expediteur.prenom}{" "}
-                    {selection.expediteur.nom}
-                  </p>
-                  <p>
-                    <strong>Email :</strong> {selection.expediteur.email}
-                  </p>
-
-                  {selection.piecesJointes && selection.piecesJointes.length > 0 && (
-                    <div style={{ marginTop: "20px", borderTop: "1px solid #eee", paddingTop: "10px" }}>
-                      <h4>Pièces jointes ({selection.piecesJointes.length})</h4>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                        {selection.piecesJointes.map((pj) => (
-                          <ApercuFichier key={pj.idPiece} piece={pj} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <hr />
-                  <p className="mail-body">{selection.contenu}</p>
-
-                  {/* Bouton pour répondre */}
-                  <button 
-                    className="mail-reply-btn"
-                    onClick={() => setNouveauMessageOuvert(true)}
-                  >
-                    Répondre
-                  </button>
-                </>
-              ) : (
-                <p className="mail-empty">
-                  Sélectionnez un message pour le lire.
-                </p>
-              )}
-            </section>
-          </div>
-        )}
-      </main>
-
-      {nouveauMessageOuvert && (
-        <NouveauMessage
-          onClose={() => setNouveauMessageOuvert(false)}
-          onEnvoyer={gererEnvoi}
-          // On peut passer l'objet et l'idMessParent si on répond à un message
-          initialObjet={selection?.objet}
-          initialIdMessParent={selection?.idMess} 
-        />
+      {chargement ? (
+        <p className="mail-empty">Chargement des messages...</p>
+      ) : conversations.length === 0 ? (
+        <p className="mail-empty">{MESSAGES_VIDES[dossier]}</p>
+      ) : (
+        <section className="mail-list">
+          {conversations.map(({ idConv, dernier, nombre }) => (
+            <button
+              key={idConv}
+              className={"mail-item " + (dernier.statut !== "Lu" ? "mail-unread" : "")}
+              onClick={() =>
+                navigate(`/messagerie/conversation/${idConv}`, { state: { dossier } })
+              }
+            >
+              <div className="mail-item-top">
+                <strong>
+                  {dernier.objet}
+                  {nombre > 1 && <span className="mail-count"> ({nombre})</span>}
+                </strong>
+                <small>
+                  {dernier.dateEnvoi
+                    ? new Date(dernier.dateEnvoi).toLocaleDateString("fr-FR")
+                    : ""}
+                </small>
+              </div>
+              <div className="mail-subject">
+                {dernier.expediteur.prenom} {dernier.expediteur.nom}
+              </div>
+              <p>{dernier.contenu}</p>
+            </button>
+          ))}
+        </section>
       )}
-    </div>
+    </>
   );
 }

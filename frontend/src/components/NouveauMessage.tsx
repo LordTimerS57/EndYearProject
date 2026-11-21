@@ -9,7 +9,6 @@ import "./NouveauMessage.css";
 
 interface Props {
   onClose: () => void;
-  // On modifie le type de retour pour récupérer l'idMess
   onEnvoyer: (data: EnvoyerMessageData) => Promise<{ idMess: number; idConv: number } | void>;
   initialObjet?: string;
   initialIdMessParent?: number;
@@ -37,7 +36,6 @@ export default function NouveauMessage({
   const inputRef = useRef<HTMLInputElement>(null);
   const listeRef = useRef<HTMLUListElement>(null);
 
-  // État pour stocker les fichiers sélectionnés
   const [fichiers, setFichiers] = useState<FileList | null>(null);
 
   const estReponse = !!initialIdMessParent;
@@ -132,15 +130,11 @@ export default function NouveauMessage({
         matriculesDestinataires: destinataires.map((d) => d.matricule),
       };
 
-      // 1. On envoie le message texte et on attend la réponse du backend
       const resultat = await onEnvoyer(data);
 
-      // 2. Si on a des fichiers ET que le message a bien été créé (on a un idMess)
       if (fichiers && fichiers.length > 0 && resultat && resultat.idMess) {
         await envoyerFichiers(resultat.idMess, fichiers);
       }
-
-      // La fermeture de la modale est gérée par le parent (BoiteReception)
     } catch (err: any) {
       setErreur(err.response?.data?.message || err.message || "Erreur lors de l'envoi");
     } finally {
@@ -149,12 +143,21 @@ export default function NouveauMessage({
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-content">
-        <h2>{estReponse ? "Répondre au message" : "Nouveau message"}</h2>
+    // Remplacement de modal-overlay par compose-overlay
+    <div className="compose-overlay">
+      {/* Remplacement de modal-content par compose-window */}
+      <div className="compose-window">
+        
+        {/* Ajout du header avec la classe compose-header */}
+        <div className="compose-header">
+          <h3>{estReponse ? "Répondre au message" : "Nouveau message"}</h3>
+          <button type="button" onClick={onClose} disabled={envoiEnCours}>
+            ×
+          </button>
+        </div>
 
         <form onSubmit={handleSubmit}>
-          {/* ... (Le bloc des destinataires reste inchangé) ... */}
+          
           {!estReponse && (
             <div className="destinataires-wrapper" ref={champRef}>
               <div className="destinataires-champ" onClick={() => inputRef.current?.focus()}>
@@ -180,7 +183,7 @@ export default function NouveauMessage({
                   aria-autocomplete="list"
                   placeholder={
                     destinataires.length === 0
-                      ? "Rechercher un destinataire (nom, prénom, matricule)…"
+                      ? "À : Rechercher un destinataire (nom, prénom, matricule)…"
                       : "Ajouter un destinataire…"
                   }
                   value={saisie}
@@ -233,6 +236,7 @@ export default function NouveauMessage({
             </div>
           )}
 
+          {/* Le champ Objet */}
           <input
             type="text"
             placeholder="Objet"
@@ -242,6 +246,7 @@ export default function NouveauMessage({
             disabled={estReponse || envoiEnCours}
           />
 
+          {/* Le champ Contenu */}
           <textarea
             placeholder="Votre message..."
             value={contenu}
@@ -250,35 +255,35 @@ export default function NouveauMessage({
             disabled={envoiEnCours}
           />
 
-          {/* NOUVEAU : Champ de sélection de fichiers */}
-          <div className="fichiers-wrapper" style={{ marginTop: "10px", marginBottom: "10px" }}>
-            <label style={{ display: "block", marginBottom: "5px", fontSize: "14px", color: "#555" }}>
-              Pièces jointes :
-            </label>
+          {/* Le champ de sélection de fichiers (intégré avec un peu de style en ligne pour coller au design) */}
+          <div style={{ padding: "10px 0", borderBottom: "1px solid #e5e7eb" }}>
             <input
               type="file"
               multiple
               onChange={(e) => setFichiers(e.target.files)}
               disabled={envoiEnCours}
-              style={{ fontSize: "14px" }}
+              style={{ fontSize: "14px", border: "none", padding: "0" }} // On enlève les bordures pour coller au design
             />
             {fichiers && fichiers.length > 0 && (
               <div style={{ fontSize: "12px", color: "#666", marginTop: "5px" }}>
-                {fichiers.length} fichier(s) sélectionné(s)
+                📎 {fichiers.length} fichier(s) sélectionné(s)
               </div>
             )}
           </div>
 
-          {erreur && <p style={{ color: "red" }}>{erreur}</p>}
-
-          <div className="modal-actions">
-            <button type="button" onClick={onClose} disabled={envoiEnCours}>
-              Annuler
-            </button>
-            <button type="submit" disabled={envoiEnCours}>
+          {/* Le Footer avec les boutons d'action */}
+          <div className="compose-footer">
+            <button type="submit" className="compose-send" disabled={envoiEnCours}>
               {envoiEnCours ? "Envoi..." : "Envoyer"}
             </button>
+            
+            <button type="button" className="compose-discard" onClick={onClose} disabled={envoiEnCours}>
+              Annuler
+            </button>
+
+            {erreur && <span className="compose-error">{erreur}</span>}
           </div>
+
         </form>
       </div>
     </div>
