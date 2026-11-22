@@ -6,6 +6,7 @@ import AdminUtilisateurs from "./pages/AdminUtilisateurs";
 import MessagerieLayout from "./pages/MessagerieLayout";
 import ListeMessages from "./pages/ListeMessages";
 import LectureConversation from "./pages/LectureConversation";
+import Brouillons from "./pages/Brouillons";
 
 function Accueil() {
   return (
@@ -72,6 +73,7 @@ export default function App() {
           <Route path="reception" element={<ListeMessages dossier="boite" />} />
           <Route path="archives" element={<ListeMessages dossier="archive" />} />
           <Route path="corbeille" element={<ListeMessages dossier="corbeille" />} />
+          <Route path="brouillons" element={<Brouillons />} />
           <Route path="conversation/:idConv" element={<LectureConversation />} />
         </Route>
 

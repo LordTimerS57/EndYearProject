@@ -1,6 +1,16 @@
 import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { envoyerMessage, type EnvoyerMessageData } from "../services/messageService";
+import {
+  creerBrouillon,
+  envoyerBrouillon,
+  envoyerMessage,
+  modifierBrouillon,
+  supprimerBrouillon,
+  supprimerFichierBrouillon,
+  type BrouillonData,
+  type BrouillonDetail,
+  type EnvoyerMessageData,
+} from "../services/messageService";
 import NouveauMessage from "../components/NouveauMessage";
 import type { MessagerieContext, OptionsNouveauMessage } from "./MessagerieContext";
 import "./BoiteReception.css";
@@ -11,7 +21,13 @@ export default function MessagerieLayout() {
   const { pathname } = useLocation();
 
   const [nouveauMessage, setNouveauMessage] = useState<OptionsNouveauMessage | null>(null);
+  const [brouillonInitial, setBrouillonInitial] = useState<BrouillonDetail | null>(null);
   const [version, setVersion] = useState(0);
+
+  function fermerComposeur() {
+    setNouveauMessage(null);
+    setBrouillonInitial(null);
+  }
 
   function deconnexion() {
     sessionStorage.removeItem("token");
@@ -29,7 +45,7 @@ export default function MessagerieLayout() {
     try {
       const resultat = await envoyerMessage(data);
 
-      setNouveauMessage(null);
+      fermerComposeur();
       setVersion((v) => v + 1); // recharge la page affichée
 
       // On retourne le résultat pour que NouveauMessage puisse envoyer les fichiers
@@ -40,8 +56,42 @@ export default function MessagerieLayout() {
     }
   }
 
+  async function gererSauvegardeBrouillon(
+    data: BrouillonData,
+    idMess?: number
+  ) {
+    return idMess === undefined
+      ? creerBrouillon(data)
+      : modifierBrouillon(idMess, data);
+  }
+
+  async function gererEnvoiBrouillon(idMess: number) {
+    const resultat = await envoyerBrouillon(idMess);
+    fermerComposeur();
+    setVersion((v) => v + 1);
+    return resultat;
+  }
+
+  async function gererSuppressionBrouillon(idMess: number) {
+    await supprimerBrouillon(idMess);
+    fermerComposeur();
+    setVersion((v) => v + 1);
+  }
+
+  async function gererSuppressionFichierBrouillon(idMess: number, idPiece: number) {
+    await supprimerFichierBrouillon(idMess, idPiece);
+    setVersion((v) => v + 1);
+  }
+
   const contexte: MessagerieContext = {
-    ouvrirNouveauMessage: (options = {}) => setNouveauMessage(options),
+    ouvrirNouveauMessage: (options = {}) => {
+      setBrouillonInitial(null);
+      setNouveauMessage(options);
+    },
+    ouvrirBrouillon: (brouillon) => {
+      setBrouillonInitial(brouillon);
+      setNouveauMessage({});
+    },
     version,
   };
 
@@ -50,7 +100,7 @@ export default function MessagerieLayout() {
       <aside className="mail-sidebar">
         <h2>Messagerie</h2>
 
-        <button className="mail-compose" onClick={() => setNouveauMessage({})}>
+        <button className="mail-compose" onClick={() => contexte.ouvrirNouveauMessage()}>
           + Nouveau message
         </button>
 
@@ -79,6 +129,12 @@ export default function MessagerieLayout() {
           >
             Corbeille
           </button>
+          <button
+            className={classeNav("brouillons")}
+            onClick={() => navigate("/messagerie/brouillons")}
+          >
+            Brouillons
+          </button>
         </nav>
 
         <button className="mail-logout" onClick={deconnexion}>
@@ -92,8 +148,14 @@ export default function MessagerieLayout() {
 
       {nouveauMessage && (
         <NouveauMessage
-          onClose={() => setNouveauMessage(null)}
+          onClose={fermerComposeur}
           onEnvoyer={gererEnvoi}
+          initialBrouillon={brouillonInitial ?? undefined}
+          onSauvegarderBrouillon={gererSauvegardeBrouillon}
+          onEnvoyerBrouillon={gererEnvoiBrouillon}
+          onSupprimerBrouillon={gererSuppressionBrouillon}
+          onSupprimerFichierBrouillon={gererSuppressionFichierBrouillon}
+          onBrouillonModifie={() => setVersion((v) => v + 1)}
           initialObjet={nouveauMessage.objet}
           initialIdMessParent={nouveauMessage.idMessParent}
         />

@@ -1,4 +1,5 @@
 import { useOutletContext } from "react-router-dom";
+import type { BrouillonDetail } from "../services/messageService";
 
 export interface OptionsNouveauMessage {
   objet?: string;
@@ -8,7 +9,8 @@ export interface OptionsNouveauMessage {
 // Données partagées par le layout avec toutes les pages affichées dans <Outlet />
 export interface MessagerieContext {
   ouvrirNouveauMessage: (options?: OptionsNouveauMessage) => void;
-  // Incrémenté après chaque envoi : les pages se rechargent quand il change
+  ouvrirBrouillon: (brouillon: BrouillonDetail) => void;
+  // Incrémenté après un envoi ou une modification de brouillon.
   version: number;
 }
 

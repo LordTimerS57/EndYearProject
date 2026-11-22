@@ -57,6 +57,9 @@ namespace backend.Migrations
                     b.Property<DateTime?>("DateEnvoi")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("DateModification")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<long>("IdConv")
                         .HasColumnType("bigint");
 
@@ -121,9 +124,6 @@ namespace backend.Migrations
                     b.Property<long>("IdMess")
                         .HasColumnType("bigint");
 
-                    b.Property<long?>("MessageIdMess")
-                        .HasColumnType("bigint");
-
                     b.Property<string>("NomFichier")
                         .IsRequired()
                         .HasColumnType("text");
@@ -142,8 +142,6 @@ namespace backend.Migrations
                     b.HasKey("IdPiece");
 
                     b.HasIndex("IdMess");
-
-                    b.HasIndex("MessageIdMess");
 
                     b.ToTable("PiecesJointes");
                 });
@@ -288,14 +286,10 @@ namespace backend.Migrations
             modelBuilder.Entity("backend.Models.PieceJointe", b =>
                 {
                     b.HasOne("backend.Models.Message", "Message")
-                        .WithMany()
+                        .WithMany("PiecesJointes")
                         .HasForeignKey("IdMess")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.HasOne("backend.Models.Message", null)
-                        .WithMany("PiecesJointes")
-                        .HasForeignKey("MessageIdMess");
 
                     b.Navigation("Message");
                 });

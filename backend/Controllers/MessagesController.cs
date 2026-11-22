@@ -44,14 +44,17 @@ public class MessagesController : ControllerBase
         // n'est plus affiché, même si la tâche de nettoyage n'est pas encore passée.
         var limiteCorbeille = DateTime.UtcNow.AddDays(-CorbeilleParametres.JoursRetention);
 
-        var requete = _context.Messages.AsNoTracking().AsQueryable();
+        var requete = _context.Messages
+            .AsNoTracking()
+            .Where(m => m.Statut != StatutMessage.Brouillon)
+            .AsQueryable();
 
         switch (dossierNorm)
         {
             case "envoyes":
                 // Messages que j'ai envoyés et que je n'ai ni archivés, ni supprimés
                 requete = requete.Where(m => m.MatriculeExpediteur == matricule
-                    && m.Statut != "Brouillon"
+                    && m.Statut != StatutMessage.Brouillon
                     && _context.Messages.Any(i => i.IdConv == m.IdConv
                         && i.IdMessParent == null
                         && i.MatriculeExpediteur == matricule)
@@ -581,7 +584,8 @@ public class MessagesController : ControllerBase
 
         // Vérification des droits
         var aAcces = piece.Message.MatriculeExpediteur == matricule
-                     || piece.Message.Recepteurs.Any(r => r.Matricule == matricule);
+                     || (piece.Message.Statut != StatutMessage.Brouillon
+                         && piece.Message.Recepteurs.Any(r => r.Matricule == matricule));
 
         if (!aAcces) return Forbid();
 
@@ -821,7 +825,8 @@ public class MessagesController : ControllerBase
 
         var messages = await _context.Messages
             .AsNoTracking()
-            .Where(m => (m.MatriculeExpediteur == matricule
+            .Where(m => m.Statut != StatutMessage.Brouillon
+                        && (m.MatriculeExpediteur == matricule
                          || m.Recepteurs.Any(r => r.Matricule == matricule))
                         && _context.MessagesUtilisateur.Any(s =>
                             s.IdMess == m.IdMess
@@ -882,5 +887,452 @@ public class MessagesController : ControllerBase
         });
 
         return Ok(resultat);
+    }
+
+
+    /// <summary>
+    /// Charge un brouillon appartenant à l'utilisateur connecté, avec Conversation,
+    /// Recepteurs et PiecesJointes. Retourne null si introuvable, non propriétaire,
+    /// ou si le statut n'est plus Brouillon.
+    /// </summary>
+    private async Task<Message?> ChargerBrouillonAsync(
+        long idMess,
+        string matricule,
+        CancellationToken ct)
+    {
+        return await _context.Messages
+            .Include(m => m.Conversation)
+            .Include(m => m.Recepteurs)
+            .Include(m => m.PiecesJointes)
+            .FirstOrDefaultAsync(m =>
+                m.IdMess == idMess
+                && m.MatriculeExpediteur == matricule
+                && m.Statut == StatutMessage.Brouillon,
+                ct);
+    }
+
+
+    [HttpPost("brouillons")]
+    public async Task<IActionResult> CreerBrouillon(
+    [FromBody] BrouillonDto dto,
+    CancellationToken cancellationToken)
+    {
+        var matricule = GetMatricule();
+        if (string.IsNullOrWhiteSpace(matricule))
+            return Unauthorized();
+
+        if (dto is null)
+            return BadRequest(new { message = "Corps de requête invalide." });
+
+        // --- Validation destinataires ---
+        var destinataires = (dto.MatriculesDestinataires ?? new List<string>())
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Select(m => m.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (destinataires.Count > 0)
+        {
+            var existants = await _context.Utilisateurs
+                .Where(u => destinataires.Contains(u.Matricule))
+                .Select(u => u.Matricule)
+                .ToListAsync(cancellationToken);
+
+            var inconnus = destinataires
+                .Except(existants, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (inconnus.Count > 0)
+                return BadRequest(new { message = "Destinataires inconnus.", inconnus });
+        }
+
+        // --- Conversation + message ---
+        Conversation conversation;
+        long? idMessParent = null;
+
+        if (dto.IdMessParent is null)
+        {
+            conversation = new Conversation
+            {
+                Objet = dto.Objet?.Trim() ?? string.Empty,
+                DateCreation = DateTime.UtcNow
+            };
+            _context.Conversations.Add(conversation);
+        }
+        else
+        {
+            var parent = await _context.Messages
+                .Include(m => m.Conversation)
+                .Include(m => m.Recepteurs)
+                .FirstOrDefaultAsync(m => m.IdMess == dto.IdMessParent, cancellationToken);
+
+            if (parent is null)
+                return BadRequest(new { message = "Message parent introuvable." });
+
+            var estExpediteur = parent.MatriculeExpediteur == matricule;
+            var estDestinataire = parent.Recepteurs.Any(r => r.Matricule == matricule);
+
+            if (!estExpediteur && !estDestinataire)
+                return NotFound(); // ne pas divulguer l'existence
+
+            if (parent.Statut == StatutMessage.Brouillon)
+                return BadRequest(new { message = "Impossible de répondre à un brouillon." });
+
+            conversation = parent.Conversation;
+            idMessParent = parent.IdMess;
+        }
+
+        var brouillon = new Message
+        {
+            Contenu = dto.Contenu ?? string.Empty,
+            DateEnvoi = null,
+            DateModification = DateTime.UtcNow,
+            Statut = StatutMessage.Brouillon,
+            MatriculeExpediteur = matricule,
+            IdMessParent = idMessParent,
+            Conversation = conversation
+        };
+
+        foreach (var dest in destinataires)
+            brouillon.Recepteurs.Add(new Recepteur { Matricule = dest });
+
+        _context.Messages.Add(brouillon);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return CreatedAtAction(
+            nameof(DetailBrouillon),
+            new { idMess = brouillon.IdMess },
+            new BrouillonReponseDto
+            {
+                IdMess = brouillon.IdMess,
+                IdConv = brouillon.IdConv,
+                Statut = brouillon.Statut,
+                Message = "Brouillon créé."
+            });
+    }
+
+
+    [HttpGet("brouillons")]
+    public async Task<IActionResult> ListeBrouillons(CancellationToken cancellationToken)
+    {
+        var matricule = GetMatricule();
+        if (string.IsNullOrWhiteSpace(matricule))
+            return Unauthorized();
+
+        var brouillons = await _context.Messages
+            .AsNoTracking()
+            .Where(m => m.MatriculeExpediteur == matricule
+                     && m.Statut == StatutMessage.Brouillon)
+            .OrderByDescending(m => m.DateModification ?? m.Conversation.DateCreation)
+            .Select(m => new BrouillonListeDto
+            {
+                IdMess = m.IdMess,
+                IdConv = m.IdConv,
+                Objet = m.Conversation.Objet,
+                Apercu = m.Contenu.Length > 200
+                    ? m.Contenu.Substring(0, 200)
+                    : m.Contenu,
+                DateModification = m.DateModification,
+                DateCreation = m.Conversation.DateCreation,
+                Destinataires = m.Recepteurs.Select(r => r.Matricule).ToList(),
+                NombrePiecesJointes = m.PiecesJointes.Count
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(brouillons);
+    }
+
+
+    [HttpGet("brouillons/{idMess:long}")]
+    public async Task<IActionResult> DetailBrouillon(
+    long idMess,
+    CancellationToken cancellationToken)
+    {
+        var matricule = GetMatricule();
+        if (string.IsNullOrWhiteSpace(matricule))
+            return Unauthorized();
+
+        var b = await ChargerBrouillonAsync(idMess, matricule, cancellationToken);
+        if (b is null)
+            return NotFound(); // pas 403 : ne pas divulguer l'existence
+
+        var dto = new BrouillonDetailDto
+        {
+            IdMess = b.IdMess,
+            IdConv = b.IdConv,
+            Objet = b.Conversation.Objet,
+            Contenu = b.Contenu,
+            MatriculesDestinataires = b.Recepteurs.Select(r => r.Matricule).ToList(),
+            IdMessParent = b.IdMessParent,
+            PiecesJointes = b.PiecesJointes
+                .Select(p => new PieceJointeDto
+                {
+                    IdPiece = p.IdPiece,
+                    NomFichier = p.NomFichier,
+                    TypeMime = p.TypeMime,
+                    TailleFichier = p.TailleFichier,
+                    DateAjout = p.DateAjout
+                })
+                .ToList()
+        };
+
+        return Ok(dto);
+    }
+
+
+    [HttpPut("brouillons/{idMess:long}")]
+    public async Task<IActionResult> ModifierBrouillon(
+    long idMess,
+    [FromBody] BrouillonDto dto,
+    CancellationToken cancellationToken)
+    {
+        var matricule = GetMatricule();
+        if (string.IsNullOrWhiteSpace(matricule))
+            return Unauthorized();
+
+        if (dto is null)
+            return BadRequest(new { message = "Corps de requête invalide." });
+
+        var brouillon = await ChargerBrouillonAsync(idMess, matricule, cancellationToken);
+        if (brouillon is null)
+            return NotFound();
+
+        // --- Contenu ---
+        if (dto.Contenu is not null)
+            brouillon.Contenu = dto.Contenu;
+
+        // --- Objet : uniquement si ce n'est PAS une réponse ---
+        if (brouillon.IdMessParent is null && dto.Objet is not null)
+            brouillon.Conversation.Objet = dto.Objet.Trim();
+
+        // --- Destinataires (comportement null / [] / [..]) ---
+        if (dto.MatriculesDestinataires is not null)
+        {
+            var nouveaux = dto.MatriculesDestinataires
+                .Where(m => !string.IsNullOrWhiteSpace(m))
+                .Select(m => m.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            // Interdit de s'ajouter soi-même (règle de l'app : "on ne s'écrit pas à soi-même")
+            if (nouveaux.Contains(matricule, StringComparer.OrdinalIgnoreCase))
+                return BadRequest(new { message = "L'expéditeur ne peut pas être destinataire." });
+
+            // Vérifier que tous les matricules existent
+            if (nouveaux.Count > 0)
+            {
+                var existants = await _context.Utilisateurs
+                    .Where(u => nouveaux.Contains(u.Matricule))
+                    .Select(u => u.Matricule)
+                    .ToListAsync(cancellationToken);
+
+                var inconnus = nouveaux
+                    .Except(existants, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                if (inconnus.Count > 0)
+                    return BadRequest(new { message = "Destinataires inconnus.", inconnus });
+            }
+
+            var anciens = brouillon.Recepteurs
+                .Select(r => r.Matricule)
+                .ToList();
+
+            var aSupprimer = brouillon.Recepteurs
+                .Where(r => !nouveaux.Contains(r.Matricule, StringComparer.OrdinalIgnoreCase))
+                .ToList();
+
+            if (aSupprimer.Count > 0)
+            {
+                _context.Recepteurs.RemoveRange(aSupprimer);
+                foreach (var r in aSupprimer)
+                    brouillon.Recepteurs.Remove(r);
+            }
+
+            var aAjouter = nouveaux
+                .Except(anciens, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            foreach (var dest in aAjouter)
+                brouillon.Recepteurs.Add(new Recepteur { Matricule = dest });
+        }
+
+        brouillon.DateModification = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return Ok(new BrouillonReponseDto
+        {
+            IdMess = brouillon.IdMess,
+            IdConv = brouillon.IdConv,
+            Statut = brouillon.Statut,
+            Message = "Brouillon enregistré."
+        });
+    }
+
+
+    [HttpDelete("brouillons/{idMess:long}")]
+    public async Task<IActionResult> SupprimerBrouillon(
+    long idMess,
+    CancellationToken cancellationToken)
+    {
+        var matricule = GetMatricule();
+        if (string.IsNullOrWhiteSpace(matricule))
+            return Unauthorized();
+
+        var brouillon = await ChargerBrouillonAsync(idMess, matricule, cancellationToken);
+        if (brouillon is null)
+            return NotFound();
+
+        // On garde les chemins pour supprimer les fichiers APRÈS le commit
+        var chemins = brouillon.PiecesJointes
+            .Select(p => p.CheminFichier)
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .ToList();
+
+        // 1) Suppression en base
+        _context.PiecesJointes.RemoveRange(brouillon.PiecesJointes);
+        _context.Recepteurs.RemoveRange(brouillon.Recepteurs);
+        _context.Messages.Remove(brouillon);
+
+        // Si c'était une réponse (IdMessParent != null), on NE supprime PAS la conversation.
+        // Si c'était le SEUL message de sa conversation (brouillon isolé), on la supprime aussi.
+        var conversationVide = !await _context.Messages
+            .AnyAsync(m => m.IdConv == brouillon.IdConv && m.IdMess != brouillon.IdMess,
+                cancellationToken);
+
+        var conversationASupprimer = conversationVide ? brouillon.Conversation : null;
+        if (conversationASupprimer is not null)
+            _context.Conversations.Remove(conversationASupprimer);
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        // 2) Suppression physique — après le commit.
+        // Si un fichier échoue, on ne casse pas la transaction déjà validée.
+        foreach (var chemin in chemins)
+        {
+            try
+            {
+                await _fileStorage.SupprimerFichierAsync(chemin, cancellationToken);
+            }
+            catch
+            {
+                // On log l'erreur, mais on ne renvoie pas 500 : le brouillon
+                // est supprimé côté base, c'est ce qui compte pour l'utilisateur.
+                // TODO : injecter ILogger<MessagesController> et logguer.
+            }
+        }
+
+        return NoContent();
+    }
+
+
+    [HttpPost("brouillons/{idMess:long}/envoyer")]
+    public async Task<IActionResult> EnvoyerBrouillon(
+    long idMess,
+    CancellationToken cancellationToken)
+    {
+        var matricule = GetMatricule();
+        if (string.IsNullOrWhiteSpace(matricule))
+            return Unauthorized();
+
+        var brouillon = await ChargerBrouillonAsync(idMess, matricule, cancellationToken);
+        if (brouillon is null)
+            return NotFound();
+
+        // --- Validations à l'envoi (§7.6) ---
+        if (string.IsNullOrWhiteSpace(brouillon.Contenu))
+            return BadRequest(new { message = "Le contenu est obligatoire pour envoyer." });
+
+        // Pour un nouveau message (pas une réponse) : objet obligatoire
+        if (brouillon.IdMessParent is null
+            && string.IsNullOrWhiteSpace(brouillon.Conversation.Objet))
+            return BadRequest(new { message = "L'objet est obligatoire pour envoyer." });
+
+        var destinataires = brouillon.Recepteurs
+            .Select(r => r.Matricule)
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .ToList();
+
+        if (destinataires.Count == 0)
+            return BadRequest(new { message = "Au moins un destinataire est requis." });
+
+        // Vérifier que les destinataires existent toujours
+        var existants = await _context.Utilisateurs
+            .Where(u => destinataires.Contains(u.Matricule))
+            .Select(u => u.Matricule)
+            .ToListAsync(cancellationToken);
+
+        var inconnus = destinataires
+            .Except(existants, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (inconnus.Count > 0)
+            return BadRequest(new { message = "Destinataires inconnus.", inconnus });
+
+        // --- Transformation : on modifie LE MÊME message ---
+        brouillon.Statut = StatutMessage.Envoye;
+        brouillon.DateEnvoi = DateTime.UtcNow;
+        brouillon.DateModification = DateTime.UtcNow;
+
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Double clic / requêtes simultanées : l'une a déjà transformé le brouillon
+            return Conflict(new { message = "Ce brouillon a déjà été envoyé ou modifié." });
+        }
+
+        return Ok(new BrouillonReponseDto
+        {
+            IdMess = brouillon.IdMess,
+            IdConv = brouillon.IdConv,
+            Statut = brouillon.Statut,
+            Message = "Brouillon envoyé."
+        });
+    }
+
+
+    [HttpDelete("brouillons/{idMess:long}/fichiers/{idPiece:long}")]
+    public async Task<IActionResult> SupprimerFichierBrouillon(
+    long idMess,
+    long idPiece,
+    CancellationToken cancellationToken)
+    {
+        var matricule = GetMatricule();
+        if (string.IsNullOrWhiteSpace(matricule))
+            return Unauthorized();
+
+        var brouillon = await ChargerBrouillonAsync(idMess, matricule, cancellationToken);
+        if (brouillon is null)
+            return NotFound();
+
+        var piece = brouillon.PiecesJointes
+            .FirstOrDefault(p => p.IdPiece == idPiece);
+
+        if (piece is null)
+            return NotFound();
+
+        var chemin = piece.CheminFichier;
+
+        _context.PiecesJointes.Remove(piece);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        // Suppression physique après commit
+        if (!string.IsNullOrWhiteSpace(chemin))
+        {
+            try
+            {
+                await _fileStorage.SupprimerFichierAsync(chemin, cancellationToken);
+            }
+            catch
+            {
+                // TODO : logguer
+            }
+        }
+
+        return NoContent();
     }
 }

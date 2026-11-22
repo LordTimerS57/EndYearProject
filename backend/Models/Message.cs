@@ -9,6 +9,7 @@ public class Message
 
     public string Contenu { get; set; } = string.Empty;
     public DateTime? DateEnvoi { get; set; }
+    public DateTime? DateModification { get; set; }
     public string Statut { get; set; } = "Brouillon";
 
     public string MatriculeExpediteur { get; set; } = string.Empty;
@@ -23,6 +24,5 @@ public class Message
 
     public ICollection<PieceJointe> PiecesJointes { get; set; } = new List<PieceJointe>();
     public ICollection<Recepteur> Recepteurs { get; set; } = new List<Recepteur>();
-
 
 }

@@ -78,6 +78,41 @@ export interface UtilisateurRecherche {
   fonction: string;
 }
 
+export interface BrouillonListe {
+  idMess: number;
+  idConv: number;
+  objet: string;
+  apercu: string;
+  dateModification: string | null;
+  dateCreation: string | null;
+  destinataires: string[];
+  nombrePiecesJointes: number;
+}
+
+export interface BrouillonDetail {
+  idMess: number;
+  idConv: number;
+  objet: string;
+  contenu: string;
+  matriculesDestinataires: string[];
+  idMessParent: number | null;
+  piecesJointes: PieceJointe[];
+}
+
+export interface BrouillonData {
+  objet: string;
+  contenu: string;
+  matriculesDestinataires: string[];
+  idMessParent: number | null;
+}
+
+export interface BrouillonResultat {
+  idMess: number;
+  idConv: number;
+  statut: string;
+  message: string;
+}
+
 // ---------------------------------------------------------
 // 2. LISTES ET CONVERSATIONS
 // ---------------------------------------------------------
@@ -98,8 +133,75 @@ export async function getMessagesDossier(
     throw new Error("La réponse de la liste des messages est invalide.");
   }
 
+  return response.data.filter((message) => message.statut !== "Brouillon");
+}
+
+export async function getBrouillons(): Promise<BrouillonListe[]> {
+  const response = await axios.get<BrouillonListe[]>(
+    `${API_URL}/messages/brouillons`,
+    { headers: authHeaders() }
+  );
+
+  if (!Array.isArray(response.data)) {
+    throw new Error("La réponse des brouillons est invalide.");
+  }
+
   return response.data;
 }
+
+export async function getBrouillon(idMess: number): Promise<BrouillonDetail> {
+  const response = await axios.get<BrouillonDetail>(
+    `${API_URL}/messages/brouillons/${idMess}`,
+    { headers: authHeaders() }
+  );
+  return response.data;
+}
+
+export async function creerBrouillon(data: BrouillonData): Promise<BrouillonResultat> {
+  const response = await axios.post<BrouillonResultat>(
+    `${API_URL}/messages/brouillons`,
+    data,
+    { headers: authHeaders() }
+  );
+  return response.data;
+}
+
+export async function modifierBrouillon(
+  idMess: number,
+  data: BrouillonData
+): Promise<BrouillonResultat> {
+  const response = await axios.put<BrouillonResultat>(
+    `${API_URL}/messages/brouillons/${idMess}`,
+    data,
+    { headers: authHeaders() }
+  );
+  return response.data;
+}
+
+export async function supprimerBrouillon(idMess: number): Promise<void> {
+  await axios.delete(`${API_URL}/messages/brouillons/${idMess}`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function supprimerFichierBrouillon(
+  idMess: number,
+  idPiece: number
+): Promise<void> {
+  await axios.delete(`${API_URL}/messages/brouillons/${idMess}/fichiers/${idPiece}`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function envoyerBrouillon(idMess: number): Promise<BrouillonResultat> {
+  const response = await axios.post<BrouillonResultat>(
+    `${API_URL}/messages/brouillons/${idMess}/envoyer`,
+    {},
+    { headers: authHeaders() }
+  );
+  return response.data;
+}
+
 export async function getConversation(idConv: number): Promise<ConversationDetail> {
   const response = await axios.get<ConversationDetail>(
     `${API_URL}/messages/conversation/${idConv}`,

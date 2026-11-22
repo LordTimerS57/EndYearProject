@@ -48,4 +48,16 @@ public class FileStorageService
             File.Delete(cheminComplet);
         }
     }
+
+    public Task SupprimerFichierAsync(string cheminRelatif, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(cheminRelatif))
+            return Task.CompletedTask;
+
+        var cheminComplet = Path.Combine(_cheminBase, cheminRelatif);
+        if (File.Exists(cheminComplet))
+            File.Delete(cheminComplet);
+
+        return Task.CompletedTask;
+    }
 }

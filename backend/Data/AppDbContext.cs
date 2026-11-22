@@ -59,7 +59,7 @@ public class AppDbContext : DbContext
         // Message -> PieceJointe
         modelBuilder.Entity<PieceJointe>()
             .HasOne(p => p.Message)
-            .WithMany()
+            .WithMany(m => m.PiecesJointes)
             .HasForeignKey(p => p.IdMess)
             .OnDelete(DeleteBehavior.Cascade);
 
@@ -86,6 +86,10 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Recepteur>()
             .HasIndex(r => new { r.IdMess, r.Matricule })
             .IsUnique();
+
+        modelBuilder.Entity<Recepteur>()
+            .HasOne(r => r.Message).WithMany(m => m.Recepteurs)
+            .HasForeignKey(r => r.IdMess).OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<MessageUtilisateur>(e =>
         {

@@ -1,0 +1,51 @@
+.drafts-page {
+  padding: 20px;
+}
+
+.drafts-page > .mail-header p {
+  margin: 6px 0 0;
+  color: #64748b;
+}
+
+.drafts-list {
+  width: 100%;
+}
+
+.drafts-item {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 14px 16px;
+  text-align: left;
+  background: #fff;
+  border: 0;
+  border-bottom: 1px solid #e5e7eb;
+  cursor: pointer;
+}
+
+.drafts-item:hover {
+  background: #f5f7fa;
+}
+
+.drafts-item:disabled {
+  cursor: wait;
+}
+
+.drafts-item-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.drafts-item-header small,
+.drafts-meta {
+  color: #64748b;
+}
+
+.drafts-preview,
+.drafts-meta {
+  margin-top: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
