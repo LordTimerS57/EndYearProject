@@ -21,7 +21,9 @@ export default function LectureConversation() {
     typeof state === "object" &&
     state !== null &&
     "dossier" in state &&
-    (state.dossier === "archive" || state.dossier === "corbeille")
+    (state.dossier === "envoyes" ||
+      state.dossier === "archive" ||
+      state.dossier === "corbeille")
       ? state.dossier
       : "boite";
 
@@ -73,7 +75,14 @@ export default function LectureConversation() {
 
     try {
       await changerEtatConversation(conversation.idConv, etat);
-      navigate("/messagerie/reception", { replace: true });
+      navigate(
+        dossier === "envoyes"
+          ? etat === "archive"
+            ? "/messagerie/archives"
+            : "/messagerie/corbeille"
+          : "/messagerie/reception",
+        { replace: true }
+      );
     } catch {
       setErreur("Action impossible pour le moment.");
     }

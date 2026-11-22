@@ -82,6 +82,27 @@ namespace backend.Migrations
                     b.ToTable("Messages");
                 });
 
+            modelBuilder.Entity("backend.Models.MessageUtilisateur", b =>
+                {
+                    b.Property<long>("IdMess")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Matricule")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("DateEtat")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Etat")
+                        .HasColumnType("integer");
+
+                    b.HasKey("IdMess", "Matricule");
+
+                    b.HasIndex("Matricule", "Etat");
+
+                    b.ToTable("MessagesUtilisateur");
+                });
+
             modelBuilder.Entity("backend.Models.PieceJointe", b =>
                 {
                     b.Property<long>("IdPiece")
@@ -247,6 +268,21 @@ namespace backend.Migrations
                     b.Navigation("Expediteur");
 
                     b.Navigation("MessageParent");
+                });
+
+            modelBuilder.Entity("backend.Models.MessageUtilisateur", b =>
+                {
+                    b.HasOne("backend.Models.Message", null)
+                        .WithMany()
+                        .HasForeignKey("IdMess")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("backend.Models.Utilisateur", null)
+                        .WithMany()
+                        .HasForeignKey("Matricule")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("backend.Models.PieceJointe", b =>

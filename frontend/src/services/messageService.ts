@@ -11,7 +11,7 @@ function authHeaders() {
 // 1. TYPES & INTERFACES
 // ---------------------------------------------------------
 
-export type Dossier = "boite" | "archive" | "corbeille";
+export type Dossier = "boite" | "envoyes" | "archive" | "corbeille";
 export type EtatCible = "boite" | "archive" | "corbeille" | "supprime";
 
 export interface PieceJointe {
@@ -22,23 +22,27 @@ export interface PieceJointe {
   dateAjout: string;
 }
 
-// Un message tel que renvoyé par la liste (boîte, archives, corbeille)
-export interface MessageReception {
+export interface DestinataireResume {
+  matricule: string;
+  nom: string;
+  prenom: string;
+}
+
+// Un message renvoyé par la liste d'un dossier
+export interface MessageListe {
   idMess: number;
   idConv: number;
   objet: string;
   contenu: string;
   dateEnvoi: string;
-  statut: string;
-  idMessParent: number | null;
+  statut?: string;
   expediteur: {
     matricule: string;
     nom: string;
     prenom: string;
-    email: string;
-    fonction: string;
   };
-  piecesJointes: PieceJointe[];
+  destinataires: DestinataireResume[];
+  expireLe?: string | null;
 }
 
 // Un message à l'intérieur d'une conversation
@@ -78,21 +82,24 @@ export interface UtilisateurRecherche {
 // 2. LISTES ET CONVERSATIONS
 // ---------------------------------------------------------
 
-export async function getMessagesReception(
+export async function getMessagesDossier(
   dossier: Dossier = "boite"
-): Promise<MessageReception[]> {
-  const response = await axios.get<MessageReception[]>(
+): Promise<MessageListe[]> {
+  if (dossier === "corbeille") {
+    return getMessagesCorbeille();
+  }
+
+  const response = await axios.get<MessageListe[]>(
     `${API_URL}/messages/reception`,
     { params: { dossier }, headers: authHeaders() }
   );
 
   if (!Array.isArray(response.data)) {
-    throw new Error("La réponse de la boîte de réception est invalide.");
+    throw new Error("La réponse de la liste des messages est invalide.");
   }
 
   return response.data;
 }
-
 export async function getConversation(idConv: number): Promise<ConversationDetail> {
   const response = await axios.get<ConversationDetail>(
     `${API_URL}/messages/conversation/${idConv}`,
@@ -159,7 +166,6 @@ export async function envoyerFichiers(idMess: number, fichiers: FileList) {
 
   return response.data;
 }
-
 export async function telechargerFichierBlob(idPiece: number): Promise<Blob> {
   const response = await axios.get(
     `${API_URL}/messages/fichiers/${idPiece}`,
@@ -168,6 +174,33 @@ export async function telechargerFichierBlob(idPiece: number): Promise<Blob> {
       responseType: "blob", // indispensable : réponse binaire
     }
   );
+
+  return response.data;
+}
+
+
+export interface MessageCorbeille {
+  idMess: number;
+  idConv: number;
+  objet: string;
+  contenu: string;
+  dateEnvoi: string;
+  estMoi: boolean;
+  expediteur: { matricule: string; nom: string; prenom: string };
+  destinataires: DestinataireResume[];
+  dateEtat: string | null;
+  expireLe: string | null;
+}
+
+export async function getMessagesCorbeille(): Promise<MessageCorbeille[]> {
+  const response = await axios.get<MessageCorbeille[]>(
+    `${API_URL}/messages/corbeille`,
+    { headers: authHeaders() }
+  );
+
+  if (!Array.isArray(response.data)) {
+    throw new Error("La réponse de la corbeille est invalide.");
+  }
 
   return response.data;
 }

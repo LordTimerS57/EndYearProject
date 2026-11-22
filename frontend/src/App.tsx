@@ -4,7 +4,7 @@ import Login from "./pages/Login";
 import Inscription from "./pages/Inscription";
 import AdminUtilisateurs from "./pages/AdminUtilisateurs";
 import MessagerieLayout from "./pages/MessagerieLayout";
-import BoiteReception from "./pages/BoiteReception";
+import ListeMessages from "./pages/ListeMessages";
 import LectureConversation from "./pages/LectureConversation";
 
 function Accueil() {
@@ -67,10 +67,11 @@ export default function App() {
             </RouteProtegee>
           }
         >
+          <Route path="envoyes" element={<ListeMessages dossier="envoyes" />} />
           <Route index element={<Navigate to="reception" replace />} />
-          <Route path="reception" element={<BoiteReception dossier="boite" />} />
-          <Route path="archives" element={<BoiteReception dossier="archive" />} />
-          <Route path="corbeille" element={<BoiteReception dossier="corbeille" />} />
+          <Route path="reception" element={<ListeMessages dossier="boite" />} />
+          <Route path="archives" element={<ListeMessages dossier="archive" />} />
+          <Route path="corbeille" element={<ListeMessages dossier="corbeille" />} />
           <Route path="conversation/:idConv" element={<LectureConversation />} />
         </Route>
 

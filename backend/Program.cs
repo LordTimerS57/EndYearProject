@@ -6,6 +6,9 @@ using System.Text;
 using backend.Data;
 using Microsoft.AspNetCore.Routing;
 using backend.Services;
+using backend.Jobs;
+using Quartz;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -78,6 +81,25 @@ builder.Services.AddCors(options =>
 
 // Service de notification email
 builder.Services.AddScoped<IEmailService, EmailService>();
+
+builder.Services.AddQuartz(q =>
+{
+    var jobKey = new JobKey("NettoyageCorbeilleJob");
+
+    q.AddJob<NettoyageCorbeilleJob>(options =>
+        options.WithIdentity(jobKey));
+
+    q.AddTrigger(options => options
+        .ForJob(jobKey)
+        .WithIdentity("NettoyageCorbeilleTrigger")
+        .WithSimpleSchedule(schedule => schedule
+            .WithInterval(TimeSpan.FromHours(24))
+            .RepeatForever()
+        )
+    );
+});
+
+builder.Services.AddQuartzHostedService(o => o.WaitForJobsToComplete = true);
 
 var app = builder.Build();
 

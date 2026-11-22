@@ -1,43 +1,52 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  getMessagesReception,
+  getMessagesDossier,
   type Dossier,
-  type MessageReception,
+  type MessageListe,
 } from "../services/messageService";
 import { useMessagerie } from "./MessagerieContext";
 
 const TITRES: Record<Dossier, string> = {
   boite: "Boîte de réception",
+  envoyes: "Messages envoyés",
   archive: "Archives",
   corbeille: "Corbeille",
 };
 
 const MESSAGES_VIDES: Record<Dossier, string> = {
   boite: "Votre boîte de réception est vide.",
+  envoyes: "Vous n'avez envoyé aucun message.",
   archive: "Aucun message archivé.",
   corbeille: "La corbeille est vide.",
 };
 
 interface ConversationResume {
   idConv: number;
-  dernier: MessageReception; // message le plus récent du fil
+  dernier: MessageListe; // message le plus récent du fil
   nombre: number;
+  expireLe: string | null;
 }
 
 interface Props {
   dossier?: Dossier;
 }
 
-// Page : liste des conversations d'un dossier (boîte, archives, corbeille)
-export default function BoiteReception({ dossier = "boite" }: Props) {
+// Page : liste des conversations d'un dossier
+export default function ListeMessages({ dossier = "boite" }: Props) {
   const navigate = useNavigate();
   const { version } = useMessagerie();
 
-  const [messages, setMessages] = useState<MessageReception[]>([]);
+  const [messages, setMessages] = useState<MessageListe[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
   const [recharge, setRecharge] = useState(0);
+  const [maintenant, setMaintenant] = useState(Date.now);
+
+  useEffect(() => {
+    const intervalle = window.setInterval(() => setMaintenant(Date.now()), 60_000);
+    return () => window.clearInterval(intervalle);
+  }, []);
 
   useEffect(() => {
     let actif = true;
@@ -47,7 +56,7 @@ export default function BoiteReception({ dossier = "boite" }: Props) {
       setErreur("");
 
       try {
-        const data = await getMessagesReception(dossier);
+        const data = await getMessagesDossier(dossier);
         if (actif) setMessages(data);
       } catch {
         if (actif) setErreur("Impossible de charger les messages.");
@@ -72,14 +81,52 @@ export default function BoiteReception({ dossier = "boite" }: Props) {
     for (const m of messages) {
       const existante = map.get(m.idConv);
       if (!existante) {
-        map.set(m.idConv, { idConv: m.idConv, dernier: m, nombre: 1 });
+        map.set(m.idConv, {
+          idConv: m.idConv,
+          dernier: m,
+          nombre: 1,
+          expireLe: m.expireLe ?? null,
+        });
       } else {
         existante.nombre++;
+        const expireLe = m.expireLe ?? null;
+        const echeance = expireLe ? Date.parse(expireLe) : NaN;
+        const echeanceExistante = existante.expireLe
+          ? Date.parse(existante.expireLe)
+          : NaN;
+
+        if (
+          Number.isFinite(echeance) &&
+          (!Number.isFinite(echeanceExistante) || echeance < echeanceExistante)
+        ) {
+          existante.expireLe = expireLe;
+        }
       }
     }
 
     return Array.from(map.values());
   }, [messages]);
+
+  function formaterCompteARebours(expireLe: string | null) {
+    if (!expireLe) return "Échéance de suppression indisponible";
+
+    const echeance = Date.parse(expireLe);
+    if (!Number.isFinite(echeance)) return "Échéance de suppression invalide";
+
+    const minutesRestantes = Math.ceil((echeance - maintenant) / 60_000);
+    if (minutesRestantes <= 0) return "Suppression définitive imminente";
+
+    const jours = Math.floor(minutesRestantes / (24 * 60));
+    const heures = Math.floor((minutesRestantes % (24 * 60)) / 60);
+    const minutes = minutesRestantes % 60;
+    const parties: string[] = [];
+
+    if (jours > 0) parties.push(`${jours} j`);
+    if (heures > 0) parties.push(`${heures} h`);
+    if (minutes > 0 || parties.length === 0) parties.push(`${minutes} min`);
+
+    return `Suppression définitive dans ${parties.join(" ")}`;
+  }
 
   return (
     <>
@@ -96,14 +143,26 @@ export default function BoiteReception({ dossier = "boite" }: Props) {
         <p className="mail-empty">{MESSAGES_VIDES[dossier]}</p>
       ) : (
         <section className="mail-list">
-          {conversations.map(({ idConv, dernier, nombre }) => (
+          {conversations.map(({ idConv, dernier, nombre, expireLe }) => (
             <button
               key={idConv}
-              className={"mail-item " + (dernier.statut !== "Lu" ? "mail-unread" : "")}
+              className={
+                "mail-item " +
+                (dossier !== "envoyes" &&
+                dossier !== "corbeille" &&
+                dernier.statut !== "Lu"
+                  ? "mail-unread"
+                  : "")
+              }
               onClick={() =>
                 navigate(`/messagerie/conversation/${idConv}`, { state: { dossier } })
               }
             >
+              {dossier === "corbeille" && (
+                <small className="mail-countdown" role="timer">
+                  {formaterCompteARebours(expireLe)}
+                </small>
+              )}
               <div className="mail-item-top">
                 <strong>
                   {dernier.objet}
@@ -116,7 +175,11 @@ export default function BoiteReception({ dossier = "boite" }: Props) {
                 </small>
               </div>
               <div className="mail-subject">
-                {dernier.expediteur.prenom} {dernier.expediteur.nom}
+                {dossier === "envoyes"
+                  ? `À : ${dernier.destinataires
+                      .map((d) => `${d.prenom} ${d.nom}`.trim() || d.matricule)
+                      .join(", ")}`
+                  : `${dernier.expediteur.prenom} ${dernier.expediteur.nom}`}
               </div>
               <p>{dernier.contenu}</p>
             </button>

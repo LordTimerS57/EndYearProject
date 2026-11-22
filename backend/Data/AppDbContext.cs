@@ -17,6 +17,8 @@ public class AppDbContext : DbContext
     public DbSet<PieceJointe> PiecesJointes => Set<PieceJointe>();
     public DbSet<TransfertMail> TransfertsMail => Set<TransfertMail>();
     public DbSet<Conversation> Conversations => Set<Conversation>();
+    public DbSet<MessageUtilisateur> MessagesUtilisateur { get; set; }
+
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -84,5 +86,20 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Recepteur>()
             .HasIndex(r => new { r.IdMess, r.Matricule })
             .IsUnique();
+
+        modelBuilder.Entity<MessageUtilisateur>(e =>
+        {
+            e.HasKey(s => new { s.IdMess, s.Matricule });
+            e.HasIndex(s => new { s.Matricule, s.Etat });   // accélère les listes par dossier
+
+            e.HasOne<Message>().WithMany()
+                .HasForeignKey(s => s.IdMess)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne<Utilisateur>().WithMany()
+                .HasForeignKey(s => s.Matricule)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
     }
 }

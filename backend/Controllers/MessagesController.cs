@@ -29,36 +29,93 @@ public class MessagesController : ControllerBase
     // ---------------------------------------------------------
     // 1. RÉCEPTION DES MESSAGES
     // ---------------------------------------------------------
+   
+    // ---------------------------------------------------------
     [HttpGet("reception")]
-    public async Task<IActionResult> Reception(CancellationToken cancellationToken)
+    public async Task<IActionResult> Reception([FromQuery] string dossier = "boite", CancellationToken cancellationToken = default)
     {
         var matricule = GetMatricule();
         if (string.IsNullOrWhiteSpace(matricule))
             return Unauthorized();
 
-        var messages = await _context.Recepteurs
-            .AsNoTracking()
-            .Where(r => r.Matricule == matricule)
-            .OrderByDescending(r => r.Message.DateEnvoi)
-            .Select(r => new
+        var dossierNorm = (dossier ?? "boite").Trim().ToLowerInvariant();
+
+        // Un message en corbeille depuis plus longtemps que la durée de rétention
+        // n'est plus affiché, même si la tâche de nettoyage n'est pas encore passée.
+        var limiteCorbeille = DateTime.UtcNow.AddDays(-CorbeilleParametres.JoursRetention);
+
+        var requete = _context.Messages.AsNoTracking().AsQueryable();
+
+        switch (dossierNorm)
+        {
+            case "envoyes":
+                // Messages que j'ai envoyés et que je n'ai ni archivés, ni supprimés
+                requete = requete.Where(m => m.MatriculeExpediteur == matricule
+                    && m.Statut != "Brouillon"
+                    && _context.Messages.Any(i => i.IdConv == m.IdConv
+                        && i.IdMessParent == null
+                        && i.MatriculeExpediteur == matricule)
+                    && !_context.MessagesUtilisateur.Any(s => s.IdMess == m.IdMess && s.Matricule == matricule));
+                break;
+
+            case "archive":
+                requete = requete.Where(m =>
+                    (m.MatriculeExpediteur == matricule || m.Recepteurs.Any(r => r.Matricule == matricule))
+                    && _context.MessagesUtilisateur.Any(s => s.IdMess == m.IdMess
+                        && s.Matricule == matricule && s.Etat == EtatMessage.Archive));
+                break;
+
+            case "corbeille":
+                // Reçus ET envoyés : un message envoyé mis à la corbeille doit y apparaître aussi
+                requete = requete.Where(m =>
+                    (m.MatriculeExpediteur == matricule || m.Recepteurs.Any(r => r.Matricule == matricule))
+                    && _context.MessagesUtilisateur.Any(s => s.IdMess == m.IdMess
+                        && s.Matricule == matricule && s.Etat == EtatMessage.Corbeille
+                        && s.DateEtat >= limiteCorbeille));
+                break;
+
+            default:
+                // Boîte de réception : messages reçus sans aucun état
+                requete = requete.Where(m => m.Recepteurs.Any(r => r.Matricule == matricule)
+                    && !_context.MessagesUtilisateur.Any(s => s.IdMess == m.IdMess && s.Matricule == matricule));
+                break;
+        }
+
+        var messages = await requete
+            .OrderByDescending(m => m.DateEnvoi)
+            .Select(m => new
             {
-                IdMess = r.Message.IdMess,
-                IdConv = r.Message.IdConv,
-                Objet = r.Message.Conversation.Objet,
-                Contenu = r.Message.Contenu,
-                DateEnvoi = r.Message.DateEnvoi,
-                Statut = r.Message.Statut,
-                IdMessParent = r.Message.IdMessParent,
+                m.IdMess,
+                m.IdConv,
+                Objet = m.Conversation.Objet,
+                m.Contenu,
+                m.DateEnvoi,
+                m.Statut,
+                m.IdMessParent,
                 Expediteur = new
                 {
-                    r.Message.Expediteur.Matricule,
-                    r.Message.Expediteur.Nom,
-                    r.Message.Expediteur.Prenom,
-                    r.Message.Expediteur.Email,
-                    r.Message.Expediteur.Fonction
-                }
+                    m.Expediteur.Matricule,
+                    m.Expediteur.Nom,
+                    m.Expediteur.Prenom,
+                    m.Expediteur.Email,
+                    m.Expediteur.Fonction
+                },
+                Destinataires = m.Recepteurs.Select(r => r.Matricule).ToList(),
+                // Date à laquelle le message a été archivé / mis à la corbeille (pour moi)
+                DateEtat = _context.MessagesUtilisateur
+                    .Where(s => s.IdMess == m.IdMess && s.Matricule == matricule)
+                    .Select(s => (DateTime?)s.DateEtat)
+                    .FirstOrDefault()
             })
             .ToListAsync(cancellationToken);
+
+        // Noms des destinataires (affichés dans "Messages envoyés")
+        var matriculesDest = messages.SelectMany(m => m.Destinataires).Distinct().ToList();
+        var noms = await _context.Utilisateurs
+            .AsNoTracking()
+            .Where(u => matriculesDest.Contains(u.Matricule))
+            .Select(u => new { u.Matricule, u.Nom, u.Prenom })
+            .ToDictionaryAsync(u => u.Matricule, cancellationToken);
 
         var idMessages = messages.Select(m => m.IdMess).ToList();
 
@@ -86,6 +143,16 @@ public class MessagesController : ControllerBase
             m.Statut,
             m.IdMessParent,
             m.Expediteur,
+            Destinataires = m.Destinataires
+                .Select(d => noms.TryGetValue(d, out var u)
+                    ? new { Matricule = d, Nom = u.Nom, Prenom = u.Prenom }
+                    : new { Matricule = d, Nom = "", Prenom = "" })
+                .ToList(),
+            m.DateEtat,
+            // Échéance de suppression définitive (uniquement dans la corbeille)
+            ExpireLe = dossierNorm == "corbeille" && m.DateEtat.HasValue
+                ? m.DateEtat.Value.AddDays(CorbeilleParametres.JoursRetention)
+                : (DateTime?)null,
             PiecesJointes = piecesJointes
                 .Where(p => p.IdMess == m.IdMess)
                 .Select(p => new
@@ -121,13 +188,21 @@ public class MessagesController : ControllerBase
         if (conversation == null)
             return NotFound(new { message = "Conversation introuvable." });
 
-        // Seuls les messages auxquels l'utilisateur participe sont visibles
+        var limiteCorbeille = DateTime.UtcNow.AddDays(-CorbeilleParametres.JoursRetention);
+
+        // Seuls les messages auxquels l'utilisateur participe sont visibles.
+        // Les messages supprimés définitivement (ou dont le délai de corbeille
+        // est dépassé) sont masqués.
         var messages = await _context.Messages
             .AsNoTracking()
             .Where(m => m.IdConv == idConv
                         && (m.MatriculeExpediteur == matricule
                             || m.Recepteurs.Any(r => r.Matricule == matricule))
-                        && (m.Statut != "Brouillon" || m.MatriculeExpediteur == matricule))
+                        && (m.Statut != "Brouillon" || m.MatriculeExpediteur == matricule)
+                        && !_context.MessagesUtilisateur.Any(s => s.IdMess == m.IdMess
+                            && s.Matricule == matricule
+                            && (s.Etat == EtatMessage.Supprime
+                                || (s.Etat == EtatMessage.Corbeille && s.DateEtat < limiteCorbeille))))
             .OrderBy(m => m.DateEnvoi)
             .Select(m => new
             {
@@ -147,8 +222,9 @@ public class MessagesController : ControllerBase
             })
             .ToListAsync(cancellationToken);
 
+        // Conversation entièrement supprimée ou inaccessible : on la traite comme introuvable
         if (!messages.Any())
-            return Forbid();
+            return NotFound(new { message = "Conversation introuvable." });
 
         var idMessages = messages.Select(m => m.IdMess).ToList();
 
@@ -179,6 +255,7 @@ public class MessagesController : ControllerBase
             })
         });
     }
+
 
     // ---------------------------------------------------------
     // 3. ENVOI D'UN NOUVEAU MESSAGE (OU RÉPONSE)
@@ -517,5 +594,293 @@ public class MessagesController : ControllerBase
 
         // Renvoie le fichier avec son type MIME (ex: "image/jpeg", "video/mp4", "application/pdf")
         return PhysicalFile(cheminComplet, piece.TypeMime, piece.NomFichier);
+    }
+
+
+    public class ChangerEtatDto
+    {
+        // "boite" (ou vide) | "archive" | "corbeille" | "supprime"
+        public string? Etat { get; set; }
+    }
+
+    private static bool TryParseEtat(string? valeur, out EtatMessage? etat)
+    {
+        etat = null;
+        if (string.IsNullOrWhiteSpace(valeur) || valeur.Equals("boite", StringComparison.OrdinalIgnoreCase))
+            return true; // retour à la boîte principale
+
+        if (Enum.TryParse<EtatMessage>(valeur, true, out var e) && Enum.IsDefined(e))
+        {
+            etat = e;
+            return true;
+        }
+        return false;
+    }
+
+    private async Task AppliquerEtat(List<long> ids, string matricule, EtatMessage? etat, CancellationToken ct)
+    {
+        var existants = await _context.MessagesUtilisateur
+            .Where(s => s.Matricule == matricule && ids.Contains(s.IdMess))
+            .ToListAsync(ct);
+
+        if (etat == null)
+        {
+            // Restauration : on retire la ligne (sauf si supprimé définitivement)
+            _context.MessagesUtilisateur.RemoveRange(existants.Where(e => e.Etat != EtatMessage.Supprime));
+        }
+        else
+        {
+            foreach (var id in ids)
+            {
+                var ligne = existants.FirstOrDefault(e => e.IdMess == id);
+                if (ligne == null)
+                {
+                    _context.MessagesUtilisateur.Add(new MessageUtilisateur
+                    {
+                        IdMess = id,
+                        Matricule = matricule,
+                        Etat = etat.Value,
+                        DateEtat = DateTime.UtcNow
+                    });
+                }
+                else if (ligne.Etat != EtatMessage.Supprime && ligne.Etat != etat.Value)
+                {
+                    ligne.Etat = etat.Value;
+                    ligne.DateEtat = DateTime.UtcNow;
+                }
+            }
+        }
+
+        await _context.SaveChangesAsync(ct);
+    }
+
+    // Changer l'état d'un message (pour moi uniquement)
+    [HttpPut("{idMess:long}/etat")]
+    public async Task<IActionResult> ChangerEtatMessage(long idMess, [FromBody] ChangerEtatDto dto, CancellationToken cancellationToken)
+    {
+        var matricule = GetMatricule();
+        if (string.IsNullOrWhiteSpace(matricule))
+            return Unauthorized();
+
+        if (!TryParseEtat(dto.Etat, out var etat))
+            return BadRequest(new { message = "État invalide." });
+
+        var participe = await _context.Messages.AnyAsync(m => m.IdMess == idMess
+            && (m.MatriculeExpediteur == matricule || m.Recepteurs.Any(r => r.Matricule == matricule)),
+            cancellationToken);
+
+        if (!participe)
+            return NotFound(new { message = "Message introuvable." });
+
+        await AppliquerEtat(new List<long> { idMess }, matricule, etat, cancellationToken);
+        return NoContent();
+    }
+
+    // Changer l'état de toute une conversation (pour moi uniquement)
+    [HttpPut("conversation/{idConv:long}/etat")]
+    public async Task<IActionResult> ChangerEtatConversation(long idConv, [FromBody] ChangerEtatDto dto, CancellationToken cancellationToken)
+    {
+        var matricule = GetMatricule();
+        if (string.IsNullOrWhiteSpace(matricule))
+            return Unauthorized();
+
+        if (!TryParseEtat(dto.Etat, out var etat))
+            return BadRequest(new { message = "État invalide." });
+
+        var ids = await _context.Messages
+            .Where(m => m.IdConv == idConv
+                && (m.MatriculeExpediteur == matricule || m.Recepteurs.Any(r => r.Matricule == matricule))
+                && !_context.MessagesUtilisateur.Any(s => s.IdMess == m.IdMess
+                    && s.Matricule == matricule && s.Etat == EtatMessage.Supprime))
+            .Select(m => m.IdMess)
+            .ToListAsync(cancellationToken);
+
+        if (!ids.Any())
+            return NotFound(new { message = "Conversation introuvable." });
+
+        await AppliquerEtat(ids, matricule, etat, cancellationToken);
+        return NoContent();
+    }
+
+    // À AJOUTER dans MessagesController (nouvelle méthode, rien à remplacer).
+
+    // ---------------------------------------------------------
+    // MESSAGES ENVOYÉS
+    // ---------------------------------------------------------
+    // À AJOUTER dans MessagesController (nouvelle méthode, rien à remplacer).
+
+    // ---------------------------------------------------------
+    // MESSAGES ENVOYÉS
+    // ---------------------------------------------------------
+    [HttpGet("envoyes")]
+    public async Task<IActionResult> Envoyes(CancellationToken cancellationToken)
+    {
+        var matricule = GetMatricule();
+        if (string.IsNullOrWhiteSpace(matricule))
+            return Unauthorized();
+
+        var messages = await _context.Messages
+            .AsNoTracking()
+            .Where(m => m.MatriculeExpediteur == matricule
+                        && m.Statut != "Brouillon"
+                        // Uniquement les conversations que j'ai ouvertes : leur premier
+                        // message (celui sans parent) a été envoyé par moi.
+                        // Mes réponses dans la conversation d'un autre n'apparaissent pas ici.
+                        && _context.Messages.Any(i => i.IdConv == m.IdConv
+                            && i.IdMessParent == null
+                            && i.MatriculeExpediteur == matricule)
+                        // Masque ceux que j'ai déplacés (archive / corbeille / supprimé).
+                        // Sans effet tant que la table MessagesUtilisateur est vide.
+                        && !_context.MessagesUtilisateur.Any(s =>
+                            s.IdMess == m.IdMess && s.Matricule == matricule))
+            .OrderByDescending(m => m.DateEnvoi)
+            .Select(m => new
+            {
+                m.IdMess,
+                m.IdConv,
+                Objet = m.Conversation.Objet,
+                m.Contenu,
+                m.DateEnvoi,
+                m.Statut,
+                m.IdMessParent,
+                Destinataires = m.Recepteurs.Select(r => r.Matricule).ToList()
+            })
+            .ToListAsync(cancellationToken);
+
+        // Noms des destinataires
+        var matriculesDest = messages.SelectMany(m => m.Destinataires).Distinct().ToList();
+        var noms = await _context.Utilisateurs
+            .AsNoTracking()
+            .Where(u => matriculesDest.Contains(u.Matricule))
+            .Select(u => new { u.Matricule, u.Nom, u.Prenom })
+            .ToDictionaryAsync(u => u.Matricule, cancellationToken);
+
+        // Pièces jointes
+        var idMessages = messages.Select(m => m.IdMess).ToList();
+        var piecesJointes = await _context.PiecesJointes
+            .AsNoTracking()
+            .Where(p => idMessages.Contains(p.IdMess))
+            .Select(p => new
+            {
+                p.IdPiece,
+                p.IdMess,
+                p.NomFichier,
+                p.TypeMime,
+                p.TailleFichier,
+                p.DateAjout
+            })
+            .ToListAsync(cancellationToken);
+
+        var resultat = messages.Select(m => new
+        {
+            m.IdMess,
+            m.IdConv,
+            m.Objet,
+            m.Contenu,
+            m.DateEnvoi,
+            m.Statut,
+            m.IdMessParent,
+            Destinataires = m.Destinataires
+                .Select(d => noms.TryGetValue(d, out var u)
+                    ? new { Matricule = d, Nom = u.Nom, Prenom = u.Prenom }
+                    : new { Matricule = d, Nom = "", Prenom = "" })
+                .ToList(),
+            PiecesJointes = piecesJointes
+                .Where(p => p.IdMess == m.IdMess)
+                .Select(p => new
+                {
+                    p.IdPiece,
+                    p.NomFichier,
+                    p.TypeMime,
+                    p.TailleFichier,
+                    p.DateAjout
+                })
+                .ToList()
+        });
+
+        return Ok(resultat);
+    }
+
+
+    // À AJOUTER dans MessagesController (nouvelle méthode, rien à remplacer).
+    // Nécessite : using backend.Services;  (déjà présent) et CorbeilleParametres.cs.
+
+    // ---------------------------------------------------------
+    // CORBEILLE : conversations mises à la corbeille, avec leur échéance
+    // ---------------------------------------------------------
+    [HttpGet("corbeille")]
+    public async Task<IActionResult> Corbeille(CancellationToken cancellationToken)
+    {
+        var matricule = GetMatricule();
+        if (string.IsNullOrWhiteSpace(matricule))
+            return Unauthorized();
+
+        // Au-delà de la durée de rétention, un message n'est plus affiché, même si
+        // la tâche de nettoyage n'est pas encore passée.
+        var limite = DateTime.UtcNow.AddDays(-CorbeilleParametres.JoursRetention);
+
+        var messages = await _context.Messages
+            .AsNoTracking()
+            .Where(m => (m.MatriculeExpediteur == matricule
+                         || m.Recepteurs.Any(r => r.Matricule == matricule))
+                        && _context.MessagesUtilisateur.Any(s =>
+                            s.IdMess == m.IdMess
+                            && s.Matricule == matricule
+                            && s.Etat == EtatMessage.Corbeille
+                            && s.DateEtat >= limite))
+            .OrderByDescending(m => m.DateEnvoi)
+            .Select(m => new
+            {
+                m.IdMess,
+                m.IdConv,
+                Objet = m.Conversation.Objet,
+                m.Contenu,
+                m.DateEnvoi,
+                EstMoi = m.MatriculeExpediteur == matricule,
+                Expediteur = new
+                {
+                    m.Expediteur.Matricule,
+                    m.Expediteur.Nom,
+                    m.Expediteur.Prenom
+                },
+                Destinataires = m.Recepteurs.Select(r => r.Matricule).ToList(),
+                // Date de mise à la corbeille (pour moi)
+                DateEtat = _context.MessagesUtilisateur
+                    .Where(s => s.IdMess == m.IdMess && s.Matricule == matricule)
+                    .Select(s => (DateTime?)s.DateEtat)
+                    .FirstOrDefault()
+            })
+            .ToListAsync(cancellationToken);
+
+        // Noms des destinataires
+        var matriculesDest = messages.SelectMany(m => m.Destinataires).Distinct().ToList();
+        var noms = await _context.Utilisateurs
+            .AsNoTracking()
+            .Where(u => matriculesDest.Contains(u.Matricule))
+            .Select(u => new { u.Matricule, u.Nom, u.Prenom })
+            .ToDictionaryAsync(u => u.Matricule, cancellationToken);
+
+        var resultat = messages.Select(m => new
+        {
+            m.IdMess,
+            m.IdConv,
+            m.Objet,
+            m.Contenu,
+            m.DateEnvoi,
+            m.EstMoi,
+            m.Expediteur,
+            Destinataires = m.Destinataires
+                .Select(d => noms.TryGetValue(d, out var u)
+                    ? new { Matricule = d, Nom = u.Nom, Prenom = u.Prenom }
+                    : new { Matricule = d, Nom = "", Prenom = "" })
+                .ToList(),
+            m.DateEtat,
+            // Échéance de suppression définitive
+            ExpireLe = m.DateEtat.HasValue
+                ? m.DateEtat.Value.AddDays(CorbeilleParametres.JoursRetention)
+                : (DateTime?)null
+        });
+
+        return Ok(resultat);
     }
 }

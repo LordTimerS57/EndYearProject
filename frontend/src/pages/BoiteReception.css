@@ -126,6 +126,14 @@
   font-weight: 600;
 }
 
+.mail-countdown {
+  display: block;
+  margin-top: 6px;
+  color: #b54708;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
 .mail-item p {
   margin-top: 6px;
   color: #666;

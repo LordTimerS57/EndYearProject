@@ -61,7 +61,12 @@ export default function MessagerieLayout() {
           >
             Boîte de réception
           </button>
-          <button disabled>Messages envoyés</button>
+          <button
+            className={classeNav("envoyes")}
+            onClick={() => navigate("/messagerie/envoyes")}
+          >
+            Messages envoyés
+          </button>          
           <button
             className={classeNav("archives")}
             onClick={() => navigate("/messagerie/archives")}
