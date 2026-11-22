@@ -1,0 +1,577 @@
+body:has(.eni-login-page) {
+  display: block;
+  margin: 0;
+  padding: 0;
+  min-width: 320px;
+  background: #f8faf9;
+}
+
+#root:has(.eni-login-page) {
+  width: 100%;
+  max-width: none;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.eni-login-page {
+  --login-primary: #15803d;
+  --login-dark: #14532d;
+  --login-light: #dcfce7;
+  --login-text: #17212f;
+  --login-muted: #64748b;
+  --login-border: #dce4df;
+
+  display: grid;
+  grid-template-columns: 45% 55%;
+  min-height: 100vh;
+  width: 100%;
+  font-family: "Inter", Arial, sans-serif;
+  color: var(--login-text);
+  background: #f8faf9;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.eni-login-page *,
+.eni-login-page *::before,
+.eni-login-page *::after {
+  box-sizing: border-box;
+}
+
+/* Sidebar */
+
+.eni-login-sidebar {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 100vh;
+  padding: 45px 55px;
+  background: linear-gradient(
+    145deg,
+    #14532d 0%,
+    #166534 60%,
+    #15803d 100%
+  );
+  color: #ffffff;
+}
+
+.eni-login-brand {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.eni-login-brand-icon {
+  width: 65px;
+  height: 65px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 15px;
+  color: #ffffff;
+}
+
+.eni-login-brand h2 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 2px;
+  color: #ffffff;
+}
+
+.eni-login-brand span {
+  font-size: 14px;
+  color: #bbf7d0;
+}
+
+/* Background decoration */
+
+.eni-login-decoration {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.eni-login-decoration.circle-one {
+  height: 650px;
+  width: 650px;
+  top: -350px;
+  right: -300px;
+}
+
+.eni-login-decoration.circle-two {
+  height: 500px;
+  width: 500px;
+  bottom: -250px;
+  left: -250px;
+}
+
+.eni-login-decoration.circle-three {
+  height: 700px;
+  width: 700px;
+  bottom: -350px;
+  left: -350px;
+}
+
+/* Presentation */
+
+.eni-login-presentation {
+  max-width: 480px;
+  margin: 45px auto;
+  width: 100%;
+}
+
+.eni-login-presentation h1 {
+  font-size: clamp(28px, 3vw, 42px);
+  font-weight: 700;
+  line-height: 1.2;
+  color: white;
+  letter-spacing: -1px;
+  margin: 28px 0 20px;
+}
+
+.eni-login-presentation > p {
+  margin: 0;
+  color: #bbf7d0;
+  font-size: 15px;
+  line-height: 1.9;
+}
+
+/* Illustration */
+
+.eni-login-illustration {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 0;
+}
+
+.eni-login-illustration-ring {
+  width: 240px;
+  height: 240px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 0 0 20px rgba(255, 255, 255, 0.025);
+}
+
+.eni-login-envelope {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 175px;
+  height: 135px;
+  background: #dcfce7;
+  color: #15803d;
+  border-radius: 20px;
+  box-shadow:
+    0 15px 40px rgba(0, 0, 0, 0.12);
+}
+
+.eni-login-envelope-check {
+  position: absolute;
+  top: -15px;
+  right: -15px;
+  width: 49px;
+  height: 49px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #22c55e;
+  color: white;
+  border: 4px solid #166534;
+  border-radius: 50%;
+}
+
+/* Features */
+
+.eni-login-features {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin-top: 35px;
+}
+
+.eni-login-feature {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.eni-login-feature-icon {
+  width: 45px;
+  height: 45px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: #bbf7d0;
+}
+
+.eni-login-feature > div:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.eni-login-feature strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.eni-login-feature span {
+  color: #bbf7d0;
+  font-size: 12px;
+}
+
+.eni-login-sidebar-footer {
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 12px;
+  line-height: 1.8;
+  color: #a7d7b5;
+}
+
+/* Main */
+
+.eni-login-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
+  min-height: 100vh;
+  padding: 55px 60px 85px;
+  background: #f8faf9;
+}
+
+.eni-login-content {
+  width: 100%;
+  max-width: 420px;
+}
+
+.eni-login-icon {
+  width: 62px;
+  height: 62px;
+  border-radius: 15px;
+  background: var(--login-light);
+  color: var(--login-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 25px;
+}
+
+.eni-login-heading {
+  margin-bottom: 35px;
+}
+
+.eni-login-heading h1 {
+  font-size: 36px;
+  line-height: 1.2;
+  font-weight: 750;
+  letter-spacing: -1.2px;
+  margin: 0 0 12px;
+  color: var(--login-text);
+}
+
+.eni-login-heading p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--login-muted);
+  line-height: 1.7;
+}
+
+/* Form */
+
+.eni-login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 23px;
+  width: 100%;
+  margin: 0;
+}
+
+.eni-login-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.eni-login-form-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  margin: 0;
+}
+
+.eni-login-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 54px;
+  padding: 0 15px;
+  border: 1px solid var(--login-border);
+  border-radius: 9px;
+  background: #ffffff;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.eni-login-input-wrapper:focus-within {
+  border-color: #15803d;
+  box-shadow: 0 0 0 3px #dcfce7;
+}
+
+.eni-login-input-icon {
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.eni-login-input-wrapper:focus-within
+.eni-login-input-icon {
+  color: var(--login-primary);
+}
+
+.eni-login-page .eni-login-input-wrapper input {
+  width: 100%;
+  min-width: 0;
+  height: 52px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  outline: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--login-text);
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.eni-login-input-wrapper input::placeholder {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.eni-login-page .eni-login-password-toggle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  border: none;
+  background: transparent;
+  padding: 5px;
+  margin: 0;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.eni-login-password-toggle:hover {
+  color: #15803d;
+}
+
+/* Login button */
+
+.eni-login-page .eni-login-submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 53px;
+  margin: 6px 0 0;
+  padding: 14px;
+  background: var(--login-primary);
+  color: white;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  font-size: 14px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(21, 128, 61, 0.12);
+  transition:
+    background 0.2s,
+    transform 0.2s,
+    box-shadow 0.2s;
+}
+
+.eni-login-page .eni-login-submit:hover:not(:disabled) {
+  background: #166534;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 15px rgba(21, 128, 61, 0.2);
+}
+
+.eni-login-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Error */
+
+.eni-login-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  border-radius: 9px;
+  padding: 13px;
+  font-size: 13px;
+}
+
+.eni-login-error svg {
+  flex-shrink: 0;
+}
+
+/* Registration */
+
+.eni-login-divider {
+  height: 1px;
+  width: 100%;
+  margin: 30px 0 24px;
+  background: #e2e8e4;
+}
+
+.eni-login-register {
+  margin: 0;
+  color: var(--login-muted);
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.eni-login-page .eni-login-register a {
+  text-decoration: none;
+  font-weight: 650;
+  color: var(--login-primary);
+  margin-left: 3px;
+}
+
+.eni-login-page .eni-login-register a:hover {
+  text-decoration: underline;
+  color: var(--login-dark);
+}
+
+/* Footer */
+
+.eni-login-footer {
+  position: absolute;
+  bottom: 25px;
+  left: 20px;
+  right: 20px;
+  text-align: center;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+/* Loader */
+
+.eni-login-spinner {
+  animation: eni-login-spin 0.8s linear infinite;
+}
+
+@keyframes eni-login-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.eni-login-mobile-brand {
+  display: none;
+}
+
+/* Responsive */
+
+@media (max-width: 1100px) {
+  .eni-login-sidebar {
+    padding: 35px;
+  }
+
+  .eni-login-main {
+    padding: 45px 35px 85px;
+  }
+
+  .eni-login-illustration-ring {
+    width: 200px;
+    height: 200px;
+  }
+}
+
+@media (max-width: 768px) {
+  .eni-login-page {
+    grid-template-columns: 1fr;
+  }
+
+  .eni-login-sidebar {
+    display: none;
+  }
+
+  .eni-login-main {
+    min-height: 100vh;
+    padding: 40px 25px 85px;
+  }
+
+  .eni-login-content {
+    max-width: 420px;
+  }
+
+  .eni-login-mobile-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #14532d;
+    margin-bottom: 38px;
+  }
+
+  .eni-login-mobile-brand > div {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .eni-login-mobile-brand strong {
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1.1;
+  }
+
+  .eni-login-mobile-brand span {
+    font-size: 12px;
+    color: #64748b;
+  }
+
+  .eni-login-heading h1 {
+    font-size: 31px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eni-login-page *,
+  .eni-login-page *::before,
+  .eni-login-page *::after {
+    transition: none;
+  }
+}

@@ -1,0 +1,326 @@
+/* Layout */
+
+.eni-register-page {
+  grid-template-columns: 42% 58%;
+}
+
+.eni-register-page .eni-login-sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 35px 45px;
+  overflow-y: auto;
+}
+
+.eni-register-page .eni-login-presentation {
+  margin: 25px auto;
+}
+
+.eni-register-page .eni-login-presentation h1 {
+  font-size: clamp(28px, 2.7vw, 39px);
+  margin: 25px 0 16px;
+}
+
+.eni-register-page .eni-login-features {
+  gap: 18px;
+  margin-top: 25px;
+}
+
+.eni-register-page .eni-login-illustration-ring {
+  width: 200px;
+  height: 200px;
+}
+
+/* Illustration */
+
+.eni-register-illustration-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 130px;
+  height: 155px;
+  border-radius: 17px;
+  background: #dcfce7;
+  color: #15803d;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.12);
+}
+
+/* Main */
+
+.eni-register-page .eni-register-main {
+  min-height: 100vh;
+  padding: 35px 45px 75px;
+}
+
+.eni-register-page .eni-register-content {
+  width: 100%;
+  max-width: 570px;
+}
+
+.eni-register-page .eni-login-icon {
+  width: 55px;
+  height: 55px;
+  margin-bottom: 18px;
+  border-radius: 13px;
+}
+
+.eni-register-page .eni-login-heading {
+  margin-bottom: 25px;
+}
+
+.eni-register-page .eni-login-heading h1 {
+  margin-bottom: 9px;
+  font-size: 32px;
+}
+
+/* Form */
+
+.eni-register-page .eni-register-form {
+  display: flex;
+  flex-direction: column;
+  gap: 17px;
+}
+
+.eni-register-page .eni-login-form-group {
+  min-width: 0;
+  gap: 7px;
+}
+
+.eni-register-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 15px;
+  width: 100%;
+}
+
+.eni-register-page .eni-login-input-wrapper {
+  min-height: 49px;
+  padding: 0 12px;
+  gap: 10px;
+}
+
+.eni-register-page .eni-login-input-wrapper input {
+  height: 47px;
+  font-size: 13px;
+}
+
+.eni-register-page .eni-login-input-wrapper
+input::placeholder {
+  font-size: 12px;
+}
+
+/* Fonction : liste déroulante */
+
+.eni-register-select-wrapper {
+  position: relative;
+}
+
+.eni-register-page .eni-register-select-wrapper select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 47px;
+
+  padding: 0 25px 0 0;
+  margin: 0;
+
+  border: none;
+  outline: none;
+  border-radius: 0;
+  box-shadow: none;
+
+  background: transparent;
+  color: #17212f;
+
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.eni-register-page
+.eni-register-select-wrapper select:invalid {
+  color: #94a3b8;
+}
+
+.eni-register-page
+.eni-register-select-wrapper select option {
+  background: #ffffff;
+  color: #17212f;
+}
+
+.eni-register-page
+.eni-register-select-wrapper select:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.eni-register-select-arrow {
+  position: absolute;
+  right: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.eni-register-select-wrapper:focus-within
+.eni-register-select-arrow {
+  color: #15803d;
+}
+
+/* Password helper */
+
+.eni-register-password-hint {
+  margin: -8px 0 0;
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+/* Information */
+
+.eni-register-information {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #f0fdf4;
+  border: 1px solid #d1e9d9;
+  border-radius: 9px;
+  color: #166534;
+}
+
+.eni-register-information svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.eni-register-information p {
+  margin: 0;
+  color: #166534;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* Success message */
+
+.eni-register-success {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 15px;
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  border-radius: 9px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.eni-register-success svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Submit button */
+
+.eni-register-page .eni-login-submit {
+  min-height: 50px;
+  margin-top: 2px;
+}
+
+/* Footer */
+
+.eni-register-page .eni-login-divider {
+  margin: 23px 0 19px;
+}
+
+.eni-register-page .eni-login-register {
+  font-size: 13px;
+}
+
+/* Responsive : tablet */
+
+@media (max-width: 1100px) {
+  .eni-register-page {
+    grid-template-columns: 40% 60%;
+  }
+
+  .eni-register-page .eni-login-sidebar {
+    padding: 30px;
+  }
+
+  .eni-register-page .eni-register-main {
+    padding: 30px 30px 70px;
+  }
+
+  .eni-register-page .eni-login-illustration-ring {
+    width: 180px;
+    height: 180px;
+  }
+
+  .eni-register-row {
+    gap: 12px;
+  }
+}
+
+/* Responsive : mobile */
+
+@media (max-width: 768px) {
+  .eni-register-page {
+    grid-template-columns: 1fr;
+  }
+
+  .eni-register-page .eni-login-sidebar {
+    display: none;
+  }
+
+  .eni-register-page .eni-register-main {
+    min-height: 100vh;
+    padding: 30px 25px 80px;
+  }
+
+  .eni-register-page .eni-register-content {
+    max-width: 550px;
+  }
+
+  .eni-register-page .eni-login-mobile-brand {
+    margin-bottom: 25px;
+  }
+
+  .eni-register-page .eni-login-heading h1 {
+    font-size: 29px;
+  }
+
+  .eni-register-page .eni-register-form {
+    gap: 19px;
+  }
+}
+
+@media (max-width: 480px) {
+  .eni-register-page .eni-register-main {
+    padding: 25px 20px 75px;
+  }
+
+  .eni-register-row {
+    grid-template-columns: 1fr;
+    gap: 17px;
+  }
+
+  .eni-register-page .eni-login-input-wrapper {
+    min-height: 52px;
+  }
+
+  .eni-register-page .eni-login-input-wrapper input {
+    height: 50px;
+  }
+
+  .eni-register-page .eni-register-select-wrapper select {
+    height: 50px;
+  }
+}

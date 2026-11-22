@@ -50,6 +50,42 @@ public AdminController(
         return Ok(utilisateurs);
     }
 
+    [HttpGet("statistiques")]
+public async Task<IActionResult> GetStatistiques(
+    CancellationToken cancellationToken)
+{
+    var statuts = await _context.Utilisateurs
+        .GroupBy(u => u.Statut)
+        .Select(g => new
+        {
+            Statut = g.Key,
+            Nombre = g.Count()
+        })
+        .ToListAsync(cancellationToken);
+
+    var total = statuts.Sum(s => s.Nombre);
+
+    var actifs = statuts
+        .Where(s => s.Statut == "Actif")
+        .Sum(s => s.Nombre);
+
+    var supprimes = statuts
+        .Where(s => s.Statut == "Supprimé")
+        .Sum(s => s.Nombre);
+
+    var enAttente = statuts
+        .Where(s => s.Statut == "En attente")
+        .Sum(s => s.Nombre);
+
+    return Ok(new
+    {
+        total,
+        supprimes,
+        actifs,
+        enAttente
+    });
+}
+
     //utilisateurs
     [HttpGet("utilisateurs")]
     public async Task<IActionResult> TousLesUtilisateurs()

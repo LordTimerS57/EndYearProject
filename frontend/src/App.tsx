@@ -2,7 +2,10 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import type { ReactNode } from "react";
 import Login from "./pages/Login";
 import Inscription from "./pages/Inscription";
+import AdminLayout from "./components/admin/AdminLayout";
+import AdminDashboard from "./pages/AdminDashboard";
 import AdminUtilisateurs from "./pages/AdminUtilisateurs";
+import AdminInscriptions from "./pages/AdminInscriptions";
 import MessagerieLayout from "./pages/MessagerieLayout";
 import ListeMessages from "./pages/ListeMessages";
 import LectureConversation from "./pages/LectureConversation";
@@ -31,9 +34,6 @@ function Accueil() {
   );
 }
 
-// Vérifie le token à chaque affichage de la route (et pas une seule fois au
-// chargement de App), pour que la protection reste correcte après une connexion
-// ou une déconnexion sans rechargement de la page.
 function RouteProtegee({ children }: { children: ReactNode }) {
   return sessionStorage.getItem("token") ? (
     <>{children}</>
@@ -46,6 +46,27 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/admin" element={<AdminLayout />}>
+  <Route
+    index
+    element={<Navigate to="/admin/dashboard" replace />}
+  />
+
+  <Route
+    path="dashboard"
+    element={<AdminDashboard />}
+  />
+
+  <Route
+    path="utilisateurs"
+    element={<AdminUtilisateurs />}
+  />
+
+  <Route
+    path="inscriptions"
+    element={<AdminInscriptions />}
+  />
+</Route>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/inscription" element={<Inscription />} />
