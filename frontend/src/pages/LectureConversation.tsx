@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import axios from "axios";
+import { useEffect, useState, type FormEvent } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   changerEtatConversation,
   getConversation,
+  transfererMessage,
   type ConversationDetail,
   type Dossier,
   type EtatCible,
@@ -30,6 +32,12 @@ export default function LectureConversation() {
   const [conversation, setConversation] = useState<ConversationDetail | null>(null);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
+  const [messageATransferer, setMessageATransferer] = useState<number | null>(null);
+  const [matriculesDestinataires, setMatriculesDestinataires] = useState("");
+  const [commentaireTransfert, setCommentaireTransfert] = useState("");
+  const [erreurTransfert, setErreurTransfert] = useState("");
+  const [succesTransfert, setSuccesTransfert] = useState("");
+  const [transfertEnCours, setTransfertEnCours] = useState(false);
 
   useEffect(() => {
     let actif = true;
@@ -68,6 +76,55 @@ export default function LectureConversation() {
     // On répond au dernier message du fil (le backend rattache à la même conversation)
     const dernier = conversation.messages[conversation.messages.length - 1];
     ouvrirNouveauMessage({ objet: conversation.objet, idMessParent: dernier.idMess });
+  }
+
+  function ouvrirTransfert(idMess: number) {
+    setMessageATransferer(idMess);
+    setMatriculesDestinataires("");
+    setCommentaireTransfert("");
+    setErreurTransfert("");
+    setSuccesTransfert("");
+  }
+
+  async function soumettreTransfert(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (messageATransferer === null) return;
+
+    const destinataires = Array.from(
+      new Set(
+        matriculesDestinataires
+          .split(/[,\n;]+/)
+          .map((matricule) => matricule.trim())
+          .filter(Boolean)
+      )
+    );
+    if (destinataires.length === 0) {
+      setErreurTransfert("Saisissez au moins un matricule destinataire.");
+      return;
+    }
+
+    setErreurTransfert("");
+    setSuccesTransfert("");
+    setTransfertEnCours(true);
+    try {
+      const resultat = await transfererMessage(messageATransferer, {
+        matriculesDestinataires: destinataires,
+        commentaire: commentaireTransfert,
+      });
+      setSuccesTransfert(
+        `Transfert réussi. Nouveau message : ${resultat.idMessTransfere}.`
+      );
+    } catch (err: unknown) {
+      setErreurTransfert(
+        axios.isAxiosError<{ message?: string }>(err)
+          ? err.response?.data?.message ?? err.message
+          : err instanceof Error
+            ? err.message
+            : "Le transfert a échoué."
+      );
+    } finally {
+      setTransfertEnCours(false);
+    }
   }
 
   async function deplacer(etat: EtatCible) {
@@ -149,6 +206,67 @@ export default function LectureConversation() {
                     ))}
                   </div>
                 </div>
+              )}
+
+              {m.statut !== "Brouillon" && (
+                <>
+                  <button
+                    type="button"
+                    className="conv-transfer-button"
+                    onClick={() => ouvrirTransfert(m.idMess)}
+                  >
+                    Transférer ce message
+                  </button>
+                  {messageATransferer === m.idMess && (
+                    <form
+                      className="conv-transfer-form"
+                      onSubmit={(e) => void soumettreTransfert(e)}
+                    >
+                      <strong>Transférer le message n°{m.idMess}</strong>
+                      <label>
+                        Matricules des destinataires
+                        <textarea
+                          value={matriculesDestinataires}
+                          onChange={(e) => setMatriculesDestinataires(e.target.value)}
+                          placeholder="ex. 12345, 67890"
+                          rows={2}
+                          disabled={transfertEnCours}
+                        />
+                      </label>
+                      <small>Séparez les matricules par une virgule, un point-virgule ou une nouvelle ligne.</small>
+                      <label>
+                        Commentaire (facultatif)
+                        <textarea
+                          value={commentaireTransfert}
+                          onChange={(e) => setCommentaireTransfert(e.target.value)}
+                          rows={3}
+                          disabled={transfertEnCours}
+                        />
+                      </label>
+                      {erreurTransfert && (
+                        <p className="mail-error" role="alert">{erreurTransfert}</p>
+                      )}
+                      {succesTransfert && (
+                        <p className="conv-transfer-success" role="status">{succesTransfert}</p>
+                      )}
+                      <div className="conv-transfer-actions">
+                        <button
+                          type="submit"
+                          disabled={transfertEnCours || Boolean(succesTransfert)}
+                        >
+                          {transfertEnCours ? "Transfert..." : "Confirmer le transfert"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMessageATransferer(null)}
+                          disabled={transfertEnCours}
+                        >
+                          Fermer
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </>
               )}
             </article>
           ))}

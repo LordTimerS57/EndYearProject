@@ -71,6 +71,21 @@ export interface EnvoyerMessageData {
   matriculesDestinataires: string[];
 }
 
+export interface TransfertMessageData {
+  matriculesDestinataires: string[];
+  commentaire?: string;
+}
+
+export interface TransfertMessageResultat {
+  message: string;
+  idTransfert: number;
+  idMessOriginal: number;
+  idMessTransfere: number;
+  idConv: number;
+  destinataires: string[];
+  dateTransfert: string;
+}
+
 export interface UtilisateurRecherche {
   matricule: string;
   nom: string;
@@ -218,6 +233,18 @@ export async function envoyerMessage(data: EnvoyerMessageData) {
   const response = await axios.post(`${API_URL}/messages/envoyer`, data, {
     headers: authHeaders(),
   });
+  return response.data;
+}
+
+export async function transfererMessage(
+  idMess: number,
+  data: TransfertMessageData
+): Promise<TransfertMessageResultat> {
+  const response = await axios.post<TransfertMessageResultat>(
+    `${API_URL}/messages/${idMess}/transferer`,
+    data,
+    { headers: authHeaders() }
+  );
   return response.data;
 }
 

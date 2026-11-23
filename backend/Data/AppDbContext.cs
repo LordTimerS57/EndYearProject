@@ -77,6 +77,12 @@ public class AppDbContext : DbContext
             .HasForeignKey(t => t.MatriculeTransmetteur)
             .OnDelete(DeleteBehavior.Restrict);
 
+        modelBuilder.Entity<TransfertMail>()
+            .HasOne(t => t.MessageTransfere)
+            .WithMany()
+            .HasForeignKey(t => t.IdMessTransfere)
+            .OnDelete(DeleteBehavior.Restrict);
+
         // Email unique
         modelBuilder.Entity<Utilisateur>()
             .HasIndex(u => u.Email)

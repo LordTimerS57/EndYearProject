@@ -357,118 +357,244 @@ public class MessagesController : ControllerBase
         });
     }
 
-    // ---------------------------------------------------------
-    // 4. TRANSFÉRER UN MESSAGE
-    // Un transfert n'est pas une réponse : il crée une NOUVELLE conversation
-    // ---------------------------------------------------------
-    [HttpPost("transferer")]
-    public async Task<IActionResult> Transferer([FromBody] TransfererMessageDto dto, CancellationToken cancellationToken)
+    [HttpPost("{idMess:long}/transferer")]
+    public async Task<IActionResult> Transferer(
+    long idMess,
+    [FromBody] TransfertMailDto dto,
+    CancellationToken cancellationToken)
     {
-        var matriculeTransmetteur = GetMatricule();
-        if (string.IsNullOrWhiteSpace(matriculeTransmetteur))
+        var matricule = GetMatricule();
+        if (string.IsNullOrWhiteSpace(matricule))
             return Unauthorized();
 
-        var messageOriginal = await _context.Messages
-            .AsNoTracking()
+        if (dto is null || dto.MatriculesDestinataires is null
+            || dto.MatriculesDestinataires.Count == 0)
+            return BadRequest(new { message = "Au moins un destinataire est requis." });
+
+        // 1) Message original + autorisations
+        var original = await _context.Messages
             .Include(m => m.Conversation)
-            .Include(m => m.Expediteur)
             .Include(m => m.Recepteurs)
-            .FirstOrDefaultAsync(m => m.IdMess == dto.IdMessOriginal, cancellationToken);
+            .Include(m => m.PiecesJointes)
+            .Include(m => m.Expediteur)
+            .FirstOrDefaultAsync(m => m.IdMess == idMess, cancellationToken);
 
-        if (messageOriginal == null)
-            return NotFound(new { message = "Message original introuvable." });
+        if (original is null)
+            return NotFound(new { message = "Message introuvable." });
 
-        var aAcces = messageOriginal.MatriculeExpediteur == matriculeTransmetteur
-                     || messageOriginal.Recepteurs.Any(r => r.Matricule == matriculeTransmetteur);
+        var aAcces = original.MatriculeExpediteur == matricule
+                     || original.Recepteurs.Any(r => r.Matricule == matricule);
         if (!aAcces)
             return Forbid();
 
-        var destinataires = (dto.MatriculesDestinataires ?? new List<string>())
+        if (original.Statut == StatutMessage.Brouillon)
+            return Conflict(new { message = "Un brouillon ne peut pas être transféré." });
+
+        // 2) Destinataires : nettoyage + validation
+        var destinataires = dto.MatriculesDestinataires
             .Where(m => !string.IsNullOrWhiteSpace(m))
-            .Distinct()
+            .Select(m => m.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var destinatairesValides = await _context.Utilisateurs
+        if (destinataires.Count == 0)
+            return BadRequest(new { message = "Au moins un destinataire valide est requis." });
+
+        if (destinataires.Contains(matricule, StringComparer.OrdinalIgnoreCase))
+            return BadRequest(new { message = "Vous ne pouvez pas vous transférer un message à vous-même." });
+
+        var existants = await _context.Utilisateurs
             .Where(u => destinataires.Contains(u.Matricule))
             .Select(u => u.Matricule)
             .ToListAsync(cancellationToken);
 
-        if (!destinatairesValides.Any())
-            return BadRequest(new { message = "Aucun destinataire valide." });
+        var inconnus = destinataires.Except(existants, StringComparer.OrdinalIgnoreCase).ToList();
+        if (inconnus.Count > 0)
+            return BadRequest(new { message = "Destinataires inconnus.", inconnus });
 
-        var objetOriginal = messageOriginal.Conversation.Objet;
-        var objetTransfert = objetOriginal.StartsWith("TR:", StringComparison.OrdinalIgnoreCase)
+        // 3) Objet : préfixe "TR : " sans doublon
+        var objetOriginal = original.Conversation.Objet;
+        const string prefixe = "TR : ";
+        var objetTransfere = objetOriginal.StartsWith(prefixe, StringComparison.OrdinalIgnoreCase)
             ? objetOriginal
-            : $"TR: {objetOriginal}";
+            : prefixe + objetOriginal;
 
-        var contenuTransfert =
+        // 4) Contenu : [commentaire] + bloc transféré
+        var dateEnvoi = original.DateEnvoi ?? DateTime.UtcNow;
+        var blocOriginal =
             "---------- Message transféré ----------\n" +
-            $"De : {messageOriginal.Expediteur.Prenom} {messageOriginal.Expediteur.Nom} ({messageOriginal.Expediteur.Email})\n" +
-            $"Date : {messageOriginal.DateEnvoi:dd/MM/yyyy HH:mm}\n" +
-            $"Objet : {objetOriginal}\n\n" +
-            messageOriginal.Contenu;
+            $"De : {original.Expediteur.Prenom} {original.Expediteur.Nom} ({original.Expediteur.Email})\n" +
+            $"Objet : {objetOriginal}\n" +
+            $"Date : {dateEnvoi:dd/MM/yyyy HH:mm}\n\n" +
+            original.Contenu;
 
-        var piecesOriginales = await _context.PiecesJointes
-            .AsNoTracking()
-            .Where(p => p.IdMess == messageOriginal.IdMess)
-            .ToListAsync(cancellationToken);
+        var contenu = string.IsNullOrWhiteSpace(dto.Commentaire)
+            ? blocOriginal
+            : dto.Commentaire.Trim() + "\n\n" + blocOriginal;
 
-        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        // 5) Transaction
+        await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);
+        var nouveauxChemins = new List<string>();
 
-        // Nouvelle conversation + nouveau message (sans parent)
-        var nouveauMessage = new Message
+        try
         {
-            Contenu = contenuTransfert,
-            DateEnvoi = DateTime.UtcNow,
-            Statut = "Envoyé",
-            MatriculeExpediteur = matriculeTransmetteur,
-            IdMessParent = null,
-            Conversation = new Conversation
+            // 5a) Nouvelle conversation
+            var nouvelleConversation = new Conversation
             {
-                Objet = objetTransfert,
+                Objet = objetTransfere,
                 DateCreation = DateTime.UtcNow
-            }
-        };
+            };
 
-        foreach (var matricule in destinatairesValides)
-        {
-            nouveauMessage.Recepteurs.Add(new Recepteur { Matricule = matricule });
-        }
-
-        _context.Messages.Add(nouveauMessage);
-
-        // Historique du transfert
-        _context.TransfertsMail.Add(new TransfertMail
-        {
-            IdMessOriginal = messageOriginal.IdMess,
-            MatriculeTransmetteur = matriculeTransmetteur,
-            DateTransfert = DateTime.UtcNow
-        });
-
-        await _context.SaveChangesAsync(cancellationToken);
-
-        // Les pièces jointes suivent le transfert (même fichier sur disque, nouvelle ligne en base)
-        foreach (var piece in piecesOriginales)
-        {
-            _context.PiecesJointes.Add(new PieceJointe
+            // 5b) Nouveau message
+            var nouveauMessage = new Message
             {
-                IdMess = nouveauMessage.IdMess,
-                NomFichier = piece.NomFichier,
-                CheminFichier = piece.CheminFichier,
-                TypeMime = piece.TypeMime,
-                TailleFichier = piece.TailleFichier,
-                DateAjout = DateTime.UtcNow
+                Contenu = contenu,
+                DateEnvoi = DateTime.UtcNow,
+                DateModification = DateTime.UtcNow,   // si le champ existe (lot brouillon)
+                Statut = StatutMessage.Envoye,
+                MatriculeExpediteur = matricule,
+                Conversation = nouvelleConversation,
+                IdMessParent = null
+            };
+
+            foreach (var dest in destinataires)
+                nouveauMessage.Recepteurs.Add(new Recepteur { Matricule = dest });
+
+            _context.Messages.Add(nouveauMessage);
+            await _context.SaveChangesAsync(cancellationToken);   // obtient IdMess + IdConv
+
+            // 5c) Copie physique + nouvelles lignes PieceJointe
+            foreach (var pj in original.PiecesJointes)
+            {
+                var nouveauChemin = await _fileStorage.CopierFichierAsync(pj.CheminFichier, cancellationToken);
+                nouveauxChemins.Add(nouveauChemin);
+
+                _context.PiecesJointes.Add(new PieceJointe
+                {
+                    IdMess = nouveauMessage.IdMess,
+                    NomFichier = pj.NomFichier,
+                    CheminFichier = nouveauChemin,
+                    ObjectKey = string.Empty,       // non utilisé par le stockage local
+                    TypeMime = pj.TypeMime,
+                    TailleFichier = pj.TailleFichier,
+                    DateAjout = DateTime.UtcNow
+                });
+            }
+
+            // 5d) Historique
+            var transfert = new TransfertMail
+            {
+                IdMessOriginal = original.IdMess,
+                IdMessTransfere = nouveauMessage.IdMess,
+                MatriculeTransmetteur = matricule,
+                DateTransfert = DateTime.UtcNow
+            };
+            _context.TransfertsMail.Add(transfert);
+
+            await _context.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+
+            return StatusCode(StatusCodes.Status201Created, new
+            {
+                message = "Message transféré.",
+                IdTransfert = transfert.IdTransfert,
+                IdMessOriginal = original.IdMess,
+                IdMessTransfere = nouveauMessage.IdMess,
+                IdConv = nouveauMessage.IdConv,
+                Destinataires = destinataires,
+                DateTransfert = transfert.DateTransfert
             });
         }
-
-        await _context.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
-        return Ok(new
+        catch
         {
-            message = "Message transféré avec succès.",
-            IdMess = nouveauMessage.IdMess,
-            IdConv = nouveauMessage.IdConv
+            await tx.RollbackAsync(cancellationToken);
+
+            // Nettoyage best-effort des fichiers déjà copiés
+            foreach (var chemin in nouveauxChemins)
+            {
+                try { await _fileStorage.SupprimerFichierAsync(chemin, cancellationToken); }
+                catch { /* TODO log */ }
+            }
+            throw;
+        }
+    }
+
+    [HttpGet("transferts")]
+    public async Task<IActionResult> ListeTransferts(CancellationToken cancellationToken)
+    {
+        var matricule = GetMatricule();
+        if (string.IsNullOrWhiteSpace(matricule))
+            return Unauthorized();
+
+        var resultats = await _context.TransfertsMail
+            .AsNoTracking()
+            .Where(t => t.MatriculeTransmetteur == matricule && t.IdMessTransfere != null)
+            .OrderByDescending(t => t.DateTransfert)
+            .Select(t => new TransfertListeDto
+            {
+                IdTransfert = t.IdTransfert,
+                IdMessOriginal = t.IdMessOriginal,
+                IdMessTransfere = t.IdMessTransfere!.Value,
+                ObjetOriginal = t.MessageOriginal.Conversation.Objet,
+                ObjetTransfere = t.MessageTransfere!.Conversation.Objet,
+                DateTransfert = t.DateTransfert,
+                Destinataires = t.MessageTransfere!.Recepteurs.Select(r => r.Matricule).ToList()
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(resultats);
+    }
+
+    [HttpGet("transferts/{idTransfert:long}")]
+    public async Task<IActionResult> DetailTransfert(long idTransfert, CancellationToken cancellationToken)
+    {
+        var matricule = GetMatricule();
+        if (string.IsNullOrWhiteSpace(matricule))
+            return Unauthorized();
+
+        var t = await _context.TransfertsMail
+            .AsNoTracking()
+            .Include(x => x.MessageOriginal).ThenInclude(m => m.Conversation)
+            .Include(x => x.MessageTransfere!).ThenInclude(m => m.Conversation)
+            .Include(x => x.MessageTransfere!).ThenInclude(m => m.Recepteurs)
+            .Include(x => x.MessageTransfere!).ThenInclude(m => m.PiecesJointes)
+            .FirstOrDefaultAsync(x => x.IdTransfert == idTransfert, cancellationToken);
+
+        if (t is null || t.MessageTransfere is null)
+            return NotFound();
+
+        if (t.MatriculeTransmetteur != matricule)
+            return Forbid();
+
+        // Reconstitution du commentaire depuis le contenu
+        const string separateur = "---------- Message transféré ----------";
+        string? commentaire = null;
+        var idx = t.MessageTransfere.Contenu.IndexOf(separateur, StringComparison.Ordinal);
+        if (idx > 0)
+            commentaire = t.MessageTransfere.Contenu.Substring(0, idx).TrimEnd();
+
+        return Ok(new TransfertDetailDto
+        {
+            IdTransfert = t.IdTransfert,
+            IdMessOriginal = t.IdMessOriginal,
+            IdMessTransfere = t.MessageTransfere.IdMess,
+            IdConvTransfere = t.MessageTransfere.IdConv,
+            ObjetOriginal = t.MessageOriginal.Conversation.Objet,
+            ObjetTransfere = t.MessageTransfere.Conversation.Objet,
+            Commentaire = commentaire,
+            MatriculeTransmetteur = t.MatriculeTransmetteur,
+            DateTransfert = t.DateTransfert,
+            Destinataires = t.MessageTransfere.Recepteurs.Select(r => r.Matricule).ToList(),
+            PiecesJointes = t.MessageTransfere.PiecesJointes
+                .Select(p => new PieceJointeDto
+                {
+                    IdPiece = p.IdPiece,
+                    NomFichier = p.NomFichier,
+                    TypeMime = p.TypeMime,
+                    TailleFichier = p.TailleFichier,
+                    DateAjout = p.DateAjout
+                })
+                .ToList()
         });
     }
 

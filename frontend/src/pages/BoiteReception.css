@@ -207,3 +207,48 @@
 }
 .conv-message-header { display: flex; justify-content: space-between; }
 .conv-message-meta { color: #666; }
+.conv-transfer-button {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #24344e;
+  background: #f8fafc;
+  cursor: pointer;
+}
+.conv-transfer-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.conv-transfer-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-weight: 600;
+}
+.conv-transfer-form input,
+.conv-transfer-form textarea {
+  width: 100%;
+  padding: 9px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font: inherit;
+}
+.conv-transfer-form small { color: #64748b; }
+.conv-transfer-form .mail-error { padding: 0; }
+.conv-transfer-success { margin: 0; color: #15803d; }
+.conv-transfer-actions { display: flex; gap: 8px; }
+.conv-transfer-actions button {
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+}
+.conv-transfer-actions button:disabled { cursor: wait; opacity: 0.6; }

@@ -185,6 +185,9 @@ namespace backend.Migrations
                     b.Property<long>("IdMessOriginal")
                         .HasColumnType("bigint");
 
+                    b.Property<long?>("IdMessTransfere")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("MatriculeTransmetteur")
                         .IsRequired()
                         .HasColumnType("text");
@@ -192,6 +195,8 @@ namespace backend.Migrations
                     b.HasKey("IdTransfert");
 
                     b.HasIndex("IdMessOriginal");
+
+                    b.HasIndex("IdMessTransfere");
 
                     b.HasIndex("MatriculeTransmetteur");
 
@@ -321,6 +326,11 @@ namespace backend.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("backend.Models.Message", "MessageTransfere")
+                        .WithMany()
+                        .HasForeignKey("IdMessTransfere")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("backend.Models.Utilisateur", "Transmetteur")
                         .WithMany()
                         .HasForeignKey("MatriculeTransmetteur")
@@ -328,6 +338,8 @@ namespace backend.Migrations
                         .IsRequired();
 
                     b.Navigation("MessageOriginal");
+
+                    b.Navigation("MessageTransfere");
 
                     b.Navigation("Transmetteur");
                 });

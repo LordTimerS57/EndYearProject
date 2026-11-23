@@ -60,4 +60,39 @@ public class FileStorageService
 
         return Task.CompletedTask;
     }
+
+
+    /// <summary>
+    /// Copie un fichier existant vers un nouvel emplacement indépendant.
+    /// Retourne le chemin RELATIF du nouveau fichier (ex: "2024-05/abc_def.pdf").
+    /// Le fichier source n'est jamais modifié ni supprimé.
+    /// </summary>
+    public async Task<string> CopierFichierAsync(string cheminRelatifSource, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(cheminRelatifSource))
+            throw new ArgumentException("Chemin source vide.", nameof(cheminRelatifSource));
+
+        // Le cheminRelatifSource peut contenir des "/" (SauvegarderFichierAsync les produit)
+        var source = Path.Combine(_cheminBase, cheminRelatifSource);
+        if (!File.Exists(source))
+            throw new FileNotFoundException("Fichier source introuvable.", source);
+
+        // Même convention que SauvegarderFichierAsync : sous-dossier yyyy-MM + GUID_NomOriginal
+        var sousDossier = DateTime.UtcNow.ToString("yyyy-MM");
+        var dossierComplet = Path.Combine(_cheminBase, sousDossier);
+        if (!Directory.Exists(dossierComplet))
+            Directory.CreateDirectory(dossierComplet);
+
+        var nomOriginal = Path.GetFileName(cheminRelatifSource); // ex: "abc_original.pdf"
+        var nomUnique = $"{Guid.NewGuid()}_{nomOriginal}";
+        var destination = Path.Combine(dossierComplet, nomUnique);
+
+        await using (var src = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read))
+        await using (var dst = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        {
+            await src.CopyToAsync(dst, ct);
+        }
+
+        return Path.Combine(sousDossier, nomUnique).Replace("\\", "/");
+    }
 }
