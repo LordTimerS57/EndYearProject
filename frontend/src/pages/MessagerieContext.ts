@@ -13,6 +13,9 @@ export interface MessagerieContext {
   ouvrirBrouillon: (brouillon: BrouillonDetail) => void;
   // Incrémenté après un envoi ou une modification de brouillon.
   version: number;
+  searchTerm: string;
+  searchMode: "nom" | "matricule" | "objet";
+  dateFilter: string;
 }
 
 export function useMessagerie() {

@@ -34,7 +34,14 @@ function afficherDate(date: string | null): string {
 
 export default function Brouillons() {
   const navigate = useNavigate();
-  const { ouvrirNouveauMessage, ouvrirBrouillon, version } = useMessagerie();
+  const {
+    ouvrirNouveauMessage,
+    ouvrirBrouillon,
+    version,
+    searchTerm,
+    searchMode,
+    dateFilter,
+  } = useMessagerie();
   const [brouillons, setBrouillons] = useState<BrouillonListe[]>([]);
   const [conversations, setConversations] = useState<Record<number, ConversationBrouillon>>({});
   const [chargement, setChargement] = useState(true);
@@ -111,6 +118,33 @@ export default function Brouillons() {
     }
   }
 
+  const terme = searchTerm.trim().toLowerCase();
+  const brouillonsFiltres = brouillons.filter((brouillon) => {
+    const noms = brouillon.destinataires
+      .map((destinataire) => `${destinataire.prenom} ${destinataire.nom}`)
+      .join(" ");
+    const matricules = brouillon.destinataires
+      .map((destinataire) => destinataire.matricule)
+      .join(" ");
+
+    const correspondRecherche = !terme
+      ? true
+      : searchMode === "nom"
+        ? noms.toLowerCase().includes(terme)
+        : searchMode === "matricule"
+          ? matricules.toLowerCase().includes(terme)
+          : `${brouillon.objet} ${brouillon.apercu}`.toLowerCase().includes(terme);
+
+    const dateBrouillon = brouillon.dateModification ?? brouillon.dateCreation;
+    const correspondDate = !dateFilter
+      ? true
+      : dateBrouillon
+        ? new Date(dateBrouillon).toISOString().slice(0, 10) === dateFilter
+        : false;
+
+    return correspondRecherche && correspondDate;
+  });
+
   return (
     <section className="drafts-page">
       <header className="mail-header">
@@ -128,11 +162,15 @@ export default function Brouillons() {
 
       {chargement ? (
         <p className="mail-empty">Chargement des brouillons...</p>
-      ) : brouillons.length === 0 ? (
-        <p className="mail-empty">Aucun brouillon enregistré.</p>
+      ) : brouillonsFiltres.length === 0 ? (
+        <p className="mail-empty">
+          {brouillons.length === 0
+            ? "Aucun brouillon enregistré."
+            : "Aucun brouillon ne correspond à la recherche."}
+        </p>
       ) : (
         <section className="drafts-list">
-          {brouillons.map((brouillon) => {
+          {brouillonsFiltres.map((brouillon) => {
             const estReponse =
               brouillon.idMessParent !== null && brouillon.idMessParent !== undefined;
             const conversation = estReponse

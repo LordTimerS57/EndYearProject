@@ -377,3 +377,44 @@ export async function getMessagesProgrammes(): Promise<MessageProgramme[]> {
   }
   return response.data;
 }
+
+
+export interface RechercheMessagesParams {
+  q?: string;
+  dossier?: Dossier | "brouillons";
+  dateDebut?: string;   // ISO "YYYY-MM-DD"
+  dateFin?: string;
+  page?: number;
+  taille?: number;
+}
+
+export interface MessageRecherche {
+  idMess: number;
+  idConv: number;
+  objet: string;
+  contenu: string;
+  dateEnvoi: string | null;
+  statut: string;
+  matriculeExpediteur: string;
+  nomExpediteur: string;
+  prenomExpediteur: string;
+  destinataires: DestinataireResume[];
+  dossier: string;
+}
+
+export interface RechercheMessagesResultat {
+  total: number;
+  page: number;
+  taille: number;
+  elements: MessageRecherche[];
+}
+
+export async function rechercherMessages(
+  params: RechercheMessagesParams
+): Promise<RechercheMessagesResultat> {
+  const response = await axios.get<RechercheMessagesResultat>(
+    `${API_URL}/messages/recherche`,
+    { params, headers: authHeaders() }
+  );
+  return response.data;
+}

@@ -25,7 +25,7 @@ function afficherDate(date: string): string {
 }
 
 export default function Programmes() {
-  const { ouvrirBrouillon, version } = useMessagerie();
+  const { ouvrirBrouillon, version, searchTerm, searchMode, dateFilter } = useMessagerie();
   const [messages, setMessages] = useState<MessageProgramme[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
@@ -84,6 +84,32 @@ export default function Programmes() {
     }
   }
 
+  const terme = searchTerm.trim().toLowerCase();
+  const messagesFiltres = messages.filter((message) => {
+    const noms = message.destinataires
+      .map((destinataire) => `${destinataire.prenom} ${destinataire.nom}`)
+      .join(" ");
+    const matricules = message.destinataires
+      .map((destinataire) => destinataire.matricule)
+      .join(" ");
+
+    const correspondRecherche = !terme
+      ? true
+      : searchMode === "nom"
+        ? noms.toLowerCase().includes(terme)
+        : searchMode === "matricule"
+          ? matricules.toLowerCase().includes(terme)
+          : message.objet.toLowerCase().includes(terme);
+
+    const correspondDate = !dateFilter
+      ? true
+      : message.dateEnvoiProgramme
+        ? new Date(message.dateEnvoiProgramme).toISOString().slice(0, 10) === dateFilter
+        : false;
+
+    return correspondRecherche && correspondDate;
+  });
+
   return (
     <section className="programmes-page">
       <header className="mail-header">
@@ -101,11 +127,15 @@ export default function Programmes() {
 
       {chargement ? (
         <p className="mail-empty">Chargement des messages programmés...</p>
-      ) : messages.length === 0 ? (
-        <p className="mail-empty">Aucun message programmé.</p>
+      ) : messagesFiltres.length === 0 ? (
+        <p className="mail-empty">
+          {messages.length === 0
+            ? "Aucun message programmé."
+            : "Aucun message ne correspond à la recherche."}
+        </p>
       ) : (
         <section className="programmes-list">
-          {messages.map((message) => (
+          {messagesFiltres.map((message) => (
             <article className="programme-item" key={message.idMess}>
               <div className="programme-item-top">
                 <strong>

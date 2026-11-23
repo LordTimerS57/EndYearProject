@@ -1,5 +1,5 @@
 import axios from "axios";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Archive,
@@ -16,13 +16,16 @@ import {
   getConversation,
   getBrouillon,
   transfererMessage,
+  rechercherDestinataires,
   type ConversationDetail,
   type Dossier,
   type EtatCible,
   type MessageConversation,
+  type UtilisateurRecherche,
 } from "../services/messageService";
 import ApercuFichier from "../components/ApercuFichier";
 import { useMessagerie } from "./MessagerieContext";
+import "../components/NouveauMessage.css";
 
 interface MessageTransfere {
   commentaire: string;
@@ -130,7 +133,15 @@ export default function LectureConversation() {
   const [erreur, setErreur] = useState("");
   const [brouillonEnOuverture, setBrouillonEnOuverture] = useState<number | null>(null);
   const [messageATransferer, setMessageATransferer] = useState<number | null>(null);
-  const [matriculesDestinataires, setMatriculesDestinataires] = useState("");
+  const [destinatairesTransfert, setDestinatairesTransfert] = useState<UtilisateurRecherche[]>([]);
+  const [saisieDestinataire, setSaisieDestinataire] = useState("");
+  const [suggestionsDestinataires, setSuggestionsDestinataires] = useState<UtilisateurRecherche[]>([]);
+  const [suggestionsOuvertes, setSuggestionsOuvertes] = useState(false);
+  const [chargementDestinataires, setChargementDestinataires] = useState(false);
+  const [indexDestinataire, setIndexDestinataire] = useState(0);
+  const champDestinataireRef = useRef<HTMLDivElement>(null);
+  const inputDestinataireRef = useRef<HTMLInputElement>(null);
+  const listeDestinatairesRef = useRef<HTMLUListElement>(null);
   const [commentaireTransfert, setCommentaireTransfert] = useState("");
   const [erreurTransfert, setErreurTransfert] = useState("");
   const [succesTransfert, setSuccesTransfert] = useState("");
@@ -198,9 +209,107 @@ export default function LectureConversation() {
     }
   }
 
+  const destinatairesDisponibles = suggestionsDestinataires.filter(
+    (suggestion) =>
+      !destinatairesTransfert.some(
+        (destinataire) => destinataire.matricule === suggestion.matricule
+      )
+  );
+
+  function initialesDestinataire(destinataire: UtilisateurRecherche) {
+    const prenom = destinataire.prenom.trim();
+    const nom = destinataire.nom.trim();
+    if (prenom && nom) return `${prenom[0]}${nom[0]}`.toUpperCase();
+    if (prenom) return prenom.slice(0, 2).toUpperCase();
+    if (nom) return nom.slice(0, 2).toUpperCase();
+    return destinataire.matricule.slice(0, 2).toUpperCase();
+  }
+
+  function choisirDestinataire(destinataire: UtilisateurRecherche) {
+    setDestinatairesTransfert((destinataires) => [...destinataires, destinataire]);
+    setSaisieDestinataire("");
+    setIndexDestinataire(0);
+    inputDestinataireRef.current?.focus();
+  }
+
+  function handleDestinataireKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSuggestionsOuvertes(true);
+      setIndexDestinataire((index) =>
+        Math.min(index + 1, Math.max(destinatairesDisponibles.length - 1, 0))
+      );
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setIndexDestinataire((index) => Math.max(index - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (suggestionsOuvertes && destinatairesDisponibles[indexDestinataire]) {
+        choisirDestinataire(destinatairesDisponibles[indexDestinataire]);
+      }
+    } else if (e.key === "Escape") {
+      setSuggestionsOuvertes(false);
+    } else if (
+      e.key === "Backspace" &&
+      saisieDestinataire === "" &&
+      destinatairesTransfert.length > 0
+    ) {
+      setDestinatairesTransfert((destinataires) => destinataires.slice(0, -1));
+    }
+  }
+
+  useEffect(() => {
+    if (!suggestionsOuvertes) return;
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setChargementDestinataires(true);
+      try {
+        const resultats = await rechercherDestinataires(
+          saisieDestinataire.trim(),
+          controller.signal
+        );
+        setSuggestionsDestinataires(resultats);
+        setIndexDestinataire(0);
+      } catch {
+        if (!controller.signal.aborted) setSuggestionsDestinataires([]);
+      } finally {
+        if (!controller.signal.aborted) setChargementDestinataires(false);
+      }
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [saisieDestinataire, suggestionsOuvertes]);
+
+  useEffect(() => {
+    const handler = (event: MouseEvent) => {
+      if (
+        champDestinataireRef.current &&
+        !champDestinataireRef.current.contains(event.target as Node)
+      ) {
+        setSuggestionsOuvertes(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  useEffect(() => {
+    const element = listeDestinatairesRef.current?.children[indexDestinataire] as
+      | HTMLElement
+      | undefined;
+    element?.scrollIntoView({ block: "nearest" });
+  }, [indexDestinataire, suggestionsOuvertes]);
+
   function ouvrirTransfert(idMess: number) {
     setMessageATransferer(idMess);
-    setMatriculesDestinataires("");
+    setDestinatairesTransfert([]);
+    setSaisieDestinataire("");
+    setSuggestionsDestinataires([]);
+    setSuggestionsOuvertes(false);
     setCommentaireTransfert("");
     setErreurTransfert("");
     setSuccesTransfert("");
@@ -211,15 +320,10 @@ export default function LectureConversation() {
     if (messageATransferer === null) return;
 
     const destinataires = Array.from(
-      new Set(
-        matriculesDestinataires
-          .split(/[,\n;]+/)
-          .map((matricule) => matricule.trim())
-          .filter(Boolean)
-      )
+      new Set(destinatairesTransfert.map((destinataire) => destinataire.matricule))
     );
     if (destinataires.length === 0) {
-      setErreurTransfert("Saisissez au moins un matricule destinataire.");
+      setErreurTransfert("Choisissez au moins un destinataire dans la liste.");
       return;
     }
 
@@ -397,18 +501,113 @@ export default function LectureConversation() {
                       className="conv-transfer-form"
                       onSubmit={(e) => void soumettreTransfert(e)}
                     >
-                      <strong>Transférer le message n°{m.idMess}</strong>
-                      <label>
-                        Matricules des destinataires
-                        <textarea
-                          value={matriculesDestinataires}
-                          onChange={(e) => setMatriculesDestinataires(e.target.value)}
-                          placeholder="ex. 12345, 67890"
-                          rows={2}
-                          disabled={transfertEnCours}
-                        />
-                      </label>
-                      <small>Séparez les matricules par une virgule, un point-virgule ou une nouvelle ligne.</small>
+                      <strong>Transférer ce message</strong>
+                      <label>Destinataires</label>
+                      <div className="destinataires-wrapper" ref={champDestinataireRef}>
+                        <div
+                          className="destinataires-champ"
+                          onClick={() => inputDestinataireRef.current?.focus()}
+                        >
+                          {destinatairesTransfert.map((destinataire) => (
+                            <span
+                              key={destinataire.matricule}
+                              className="destinataire-chip"
+                              title={destinataire.matricule}
+                            >
+                              <span className="destinataire-avatar">
+                                {initialesDestinataire(destinataire)}
+                              </span>
+                              <span className="destinataire-nom">
+                                {destinataire.prenom
+                                  ? `${destinataire.prenom} ${destinataire.nom}`
+                                  : destinataire.nom || destinataire.matricule}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setDestinatairesTransfert((destinataires) =>
+                                    destinataires.filter(
+                                      (item) => item.matricule !== destinataire.matricule
+                                    )
+                                  )
+                                }
+                                aria-label={`Retirer ${destinataire.prenom} ${destinataire.nom}`}
+                                disabled={transfertEnCours}
+                              >
+                                <X size={12} aria-hidden="true" />
+                              </button>
+                            </span>
+                          ))}
+                          <input
+                            ref={inputDestinataireRef}
+                            type="text"
+                            role="combobox"
+                            aria-expanded={suggestionsOuvertes}
+                            aria-autocomplete="list"
+                            placeholder={
+                              destinatairesTransfert.length === 0
+                                ? "Rechercher un destinataire (nom, prénom, matricule)..."
+                                : "Ajouter un destinataire..."
+                            }
+                            value={saisieDestinataire}
+                            onChange={(event) => {
+                              setSaisieDestinataire(event.target.value);
+                              setSuggestionsOuvertes(true);
+                            }}
+                            onFocus={() => setSuggestionsOuvertes(true)}
+                            onKeyDown={handleDestinataireKeyDown}
+                            disabled={transfertEnCours}
+                            autoComplete="off"
+                          />
+                        </div>
+
+                        {suggestionsOuvertes && (
+                          <div className="suggestions">
+                            {chargementDestinataires && (
+                              <div className="suggestions-info">Recherche...</div>
+                            )}
+                            {!chargementDestinataires && destinatairesDisponibles.length === 0 && (
+                              <div className="suggestions-info">Aucun utilisateur trouvé</div>
+                            )}
+                            {destinatairesDisponibles.length > 0 && (
+                              <ul ref={listeDestinatairesRef} role="listbox">
+                                {destinatairesDisponibles.map((destinataire, index) => (
+                                  <li
+                                    key={destinataire.matricule}
+                                    role="option"
+                                    aria-selected={index === indexDestinataire}
+                                    className={
+                                      index === indexDestinataire
+                                        ? "suggestion actif"
+                                        : "suggestion"
+                                    }
+                                    onMouseDown={(event) => {
+                                      event.preventDefault();
+                                      choisirDestinataire(destinataire);
+                                    }}
+                                    onMouseEnter={() => setIndexDestinataire(index)}
+                                  >
+                                    <span className="suggestion-avatar">
+                                      {initialesDestinataire(destinataire)}
+                                    </span>
+                                    <span className="suggestion-textes">
+                                      <span className="suggestion-nom">
+                                        {destinataire.prenom} {destinataire.nom}
+                                      </span>
+                                      <span className="suggestion-detail">
+                                        {destinataire.matricule}
+                                        {destinataire.fonction
+                                          ? ` · ${destinataire.fonction}`
+                                          : ""}
+                                      </span>
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )}
+                      </div>
                       <label>
                         Commentaire (facultatif)
                         <textarea

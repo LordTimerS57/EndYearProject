@@ -36,7 +36,7 @@ interface Props {
 // Page : liste des conversations d'un dossier
 export default function ListeMessages({ dossier = "boite" }: Props) {
   const navigate = useNavigate();
-  const { version } = useMessagerie();
+  const { version, searchTerm, searchMode, dateFilter } = useMessagerie();
 
   const [messages, setMessages] = useState<MessageListe[]>([]);
   const [chargement, setChargement] = useState(true);
@@ -105,8 +105,36 @@ export default function ListeMessages({ dossier = "boite" }: Props) {
       }
     }
 
-    return Array.from(map.values());
-  }, [messages]);
+    const liste = Array.from(map.values());
+    const terme = searchTerm.trim().toLowerCase();
+
+    return liste.filter(({ dernier }) => {
+      const nom = `${dernier.expediteur.prenom} ${dernier.expediteur.nom}`.trim();
+      const matricule = dernier.expediteur.matricule;
+      const destinatairesNoms = dernier.destinataires
+        .map((destinataire) => `${destinataire.prenom} ${destinataire.nom}`)
+        .join(" ");
+      const destinatairesMatricules = dernier.destinataires
+        .map((destinataire) => destinataire.matricule)
+        .join(" ");
+
+      const correspondRecherche = !terme
+        ? true
+        : searchMode === "nom"
+          ? `${nom} ${destinatairesNoms}`.toLowerCase().includes(terme)
+          : searchMode === "matricule"
+            ? `${matricule} ${destinatairesMatricules}`.toLowerCase().includes(terme)
+            : `${dernier.objet} ${dernier.contenu}`.toLowerCase().includes(terme);
+
+      const correspondDate = !dateFilter
+        ? true
+        : dernier.dateEnvoi
+          ? new Date(dernier.dateEnvoi).toISOString().slice(0, 10) === dateFilter
+          : false;
+
+      return correspondRecherche && correspondDate;
+    });
+  }, [messages, searchTerm, searchMode, dateFilter]);
 
   function formaterCompteARebours(expireLe: string | null) {
     if (!expireLe) return "Échéance de suppression indisponible";

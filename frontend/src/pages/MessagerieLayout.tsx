@@ -1,13 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Archive,
+  Bell,
   CalendarClock,
+  ChevronDown,
   FileText,
   GraduationCap,
   Inbox,
   LogOut,
   PenLine,
+  Search,
   Send,
   Trash2,
 } from "lucide-react";
@@ -34,6 +37,34 @@ export default function MessagerieLayout() {
   const [nouveauMessage, setNouveauMessage] = useState<OptionsNouveauMessage | null>(null);
   const [brouillonInitial, setBrouillonInitial] = useState<BrouillonDetail | null>(null);
   const [version, setVersion] = useState(0);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchMode, setSearchMode] = useState<"nom" | "matricule" | "objet">("objet");
+  const [dateFilter, setDateFilter] = useState("");
+
+  let utilisateur: {
+    prenom?: string;
+    nom?: string;
+    type?: string;
+  } | null = null;
+
+  try {
+    utilisateur = JSON.parse(sessionStorage.getItem("utilisateur") ?? "null");
+  } catch {
+    utilisateur = null;
+  }
+
+  const nomUtilisateur = [utilisateur?.prenom, utilisateur?.nom].filter(Boolean).join(" ").trim();
+  const initiales = nomUtilisateur
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((partie) => partie[0]?.toUpperCase())
+    .join("") || "UT";
+
+  useEffect(() => {
+    setSearchTerm("");
+    setDateFilter("");
+  }, [pathname]);
 
   function fermerComposeur() {
     setNouveauMessage(null);
@@ -104,6 +135,9 @@ export default function MessagerieLayout() {
       setNouveauMessage({});
     },
     version,
+    searchTerm,
+    searchMode,
+    dateFilter,
   };
 
   return (
@@ -181,7 +215,67 @@ export default function MessagerieLayout() {
       </aside>
 
       <main className="mail-main">
-        <Outlet context={contexte} />
+        <header className="mail-top-header">
+          <div className="mail-search-controls">
+            <div className="mail-search-wrapper">
+              <Search size={19} aria-hidden="true" />
+              <input
+                type="search"
+                placeholder={
+                  searchMode === "nom"
+                    ? "Rechercher par nom..."
+                    : searchMode === "matricule"
+                      ? "Rechercher par matricule..."
+                      : "Rechercher par objet..."
+                }
+                aria-label="Rechercher dans la messagerie"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+              />
+            </div>
+            <select
+              className="mail-search-mode"
+              value={searchMode}
+              onChange={(event) =>
+                setSearchMode(event.target.value as "nom" | "matricule" | "objet")
+              }
+              aria-label="Type de recherche"
+            >
+              <option value="nom">Nom</option>
+              <option value="matricule">Matricule</option>
+              <option value="objet">Objet</option>
+            </select>
+            <input
+              className="mail-date-filter"
+              type="date"
+              value={dateFilter}
+              onChange={(event) => setDateFilter(event.target.value)}
+              aria-label="Filtrer par date"
+              title="Filtrer par date"
+            />
+          </div>
+
+          <div className="mail-header-right">
+            <div className="mail-notification" aria-label="Notifications">
+              <Bell size={23} />
+            </div>
+
+            <div className="mail-header-divider" />
+
+            <div className="mail-profile">
+              <div className="mail-avatar">{initiales}</div>
+              <div className="mail-profile-info">
+                <strong>{nomUtilisateur || utilisateur?.type || "Utilisateur"}</strong>
+                <span>ENI Fianarantsoa</span>
+              </div>
+              <ChevronDown size={16} />
+            </div>
+          </div>
+        </header>
+
+        <div className="mail-page-content">
+          <Outlet context={contexte} />
+        </div>
       </main>
 
       {nouveauMessage && (
