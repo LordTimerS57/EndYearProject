@@ -1,9 +1,10 @@
 import { useOutletContext } from "react-router-dom";
-import type { BrouillonDetail } from "../services/messageService";
+import type { BrouillonDetail, DestinataireResume } from "../services/messageService";
 
 export interface OptionsNouveauMessage {
   objet?: string;
   idMessParent?: number;
+  initialDestinataire?: DestinataireResume;
 }
 
 // Données partagées par le layout avec toutes les pages affichées dans <Outlet />

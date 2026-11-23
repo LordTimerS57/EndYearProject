@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { MailOpen, RefreshCw } from "lucide-react";
 import {
   getMessagesDossier,
   type Dossier,
@@ -132,7 +133,10 @@ export default function ListeMessages({ dossier = "boite" }: Props) {
     <>
       <header className="mail-header">
         <h2>{TITRES[dossier]}</h2>
-        <button onClick={() => setRecharge((r) => r + 1)}>Actualiser</button>
+        <button onClick={() => setRecharge((r) => r + 1)}>
+          <RefreshCw size={16} aria-hidden="true" />
+          Actualiser
+        </button>
       </header>
 
       {erreur && <p className="mail-error">{erreur}</p>}
@@ -164,9 +168,12 @@ export default function ListeMessages({ dossier = "boite" }: Props) {
                 </small>
               )}
               <div className="mail-item-top">
-                <strong>
-                  {dernier.objet}
-                  {nombre > 1 && <span className="mail-count"> ({nombre})</span>}
+                <strong className="mail-item-title">
+                  <MailOpen size={16} aria-hidden="true" />
+                  <span>
+                    {dernier.objet}
+                    {nombre > 1 && <span className="mail-count"> ({nombre})</span>}
+                  </span>
                 </strong>
                 <small>
                   {dernier.dateEnvoi
@@ -179,9 +186,13 @@ export default function ListeMessages({ dossier = "boite" }: Props) {
                   ? `À : ${dernier.destinataires
                       .map((d) => `${d.prenom} ${d.nom}`.trim() || d.matricule)
                       .join(", ")}`
-                  : `${dernier.expediteur.prenom} ${dernier.expediteur.nom}`}
+                  : (
+                    <>
+                      {dossier === "boite" && "De : "}
+                      {dernier.expediteur.prenom} {dernier.expediteur.nom}
+                    </>
+                  )}
               </div>
-              <p>{dernier.contenu}</p>
             </button>
           ))}
         </section>

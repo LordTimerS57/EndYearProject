@@ -1,12 +1,16 @@
 import axios from "axios";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import { CalendarClock, Eye, Paperclip, Save, Send, Trash2, X } from "lucide-react";
 import {
   envoyerFichiers,
   getBrouillon,
+  programmerEnvoi,
   rechercherDestinataires,
   type BrouillonData,
   type BrouillonDetail,
   type BrouillonResultat,
+  type DestinataireResume,
   type EnvoyerMessageData,
   type PieceJointe,
   type UtilisateurRecherche,
@@ -14,22 +18,26 @@ import {
 } from "../services/messageService";
 import "./NouveauMessage.css";
 
+// ---------------------------------------------------------
+// Props
+// ---------------------------------------------------------
 interface Props {
   onClose: () => void;
   onEnvoyer: (data: EnvoyerMessageData) => Promise<{ idMess: number; idConv: number } | void>;
-  onSauvegarderBrouillon: (
-    data: BrouillonData,
-    idMess?: number
-  ) => Promise<BrouillonResultat>;
+  onSauvegarderBrouillon: (data: BrouillonData, idMess?: number) => Promise<BrouillonResultat>;
   onEnvoyerBrouillon: (idMess: number) => Promise<BrouillonResultat>;
   onSupprimerBrouillon: (idMess: number) => Promise<void>;
   onSupprimerFichierBrouillon: (idMess: number, idPiece: number) => Promise<void>;
   onBrouillonModifie: () => void;
   initialObjet?: string;
   initialIdMessParent?: number;
+  initialDestinataire?: DestinataireResume;
   initialBrouillon?: BrouillonDetail;
 }
 
+// ---------------------------------------------------------
+// Utilitaires
+// ---------------------------------------------------------
 function messageErreur(erreur: unknown): string {
   if (axios.isAxiosError<{ message?: string }>(erreur)) {
     return erreur.response?.data?.message ?? erreur.message;
@@ -37,13 +45,28 @@ function messageErreur(erreur: unknown): string {
   return erreur instanceof Error ? erreur.message : "Une erreur est survenue.";
 }
 
-function creerDestinatairesInitiaux(brouillon?: BrouillonDetail): UtilisateurRecherche[] {
-  return brouillon?.matriculesDestinataires.map((matricule) => ({
-    matricule,
-    nom: matricule,
-    prenom: "",
-    fonction: "",
-  })) ?? [];
+function creerDestinatairesInitiaux(
+  brouillon?: BrouillonDetail,
+  destinataireInitial?: DestinataireResume
+): UtilisateurRecherche[] {
+  if (brouillon) {
+    return brouillon.destinataires.map((d) => ({
+      matricule: d.matricule,
+      nom: d.nom || d.matricule,
+      prenom: d.prenom || "",
+      fonction: "",
+    }));
+  }
+
+  return destinataireInitial
+    ? [
+        {
+          ...destinataireInitial,
+          nom: destinataireInitial.nom || destinataireInitial.matricule,
+          fonction: "",
+        },
+      ]
+    : [];
 }
 
 function formaterTaille(taille: number): string {
@@ -52,6 +75,18 @@ function formaterTaille(taille: number): string {
   return `${(taille / (1024 * 1024)).toFixed(1)} Mo`;
 }
 
+function initiales(u: UtilisateurRecherche): string {
+  const p = (u.prenom || "").trim();
+  const n = (u.nom || "").trim();
+  if (p && n) return `${p[0]}${n[0]}`.toUpperCase();
+  if (p) return p.slice(0, 2).toUpperCase();
+  if (n) return n.slice(0, 2).toUpperCase();
+  return u.matricule.slice(0, 2).toUpperCase();
+}
+
+// ---------------------------------------------------------
+// Composant
+// ---------------------------------------------------------
 export default function NouveauMessage({
   onClose,
   onEnvoyer,
@@ -62,54 +97,68 @@ export default function NouveauMessage({
   onBrouillonModifie,
   initialObjet = "",
   initialIdMessParent,
+  initialDestinataire,
   initialBrouillon,
 }: Props) {
-  const [destinataires, setDestinataires] = useState<UtilisateurRecherche[]>(
-    () => creerDestinatairesInitiaux(initialBrouillon)
-  );
-  const [saisie, setSaisie] = useState("");
-  const [suggestions, setSuggestions] = useState<UtilisateurRecherche[]>([]);
-  const [ouvert, setOuvert] = useState(false);
-  const [chargement, setChargement] = useState(false);
-  const [indexActif, setIndexActif] = useState(0);
-  const [idBrouillon, setIdBrouillon] = useState<number | null>(
-    initialBrouillon?.idMess ?? null
+  const navigate = useNavigate();
+
+  // --- État rédaction ---
+  const [destinataires, setDestinataires] = useState<UtilisateurRecherche[]>(() =>
+    creerDestinatairesInitiaux(initialBrouillon, initialDestinataire)
   );
   const [objet, setObjet] = useState(initialBrouillon?.objet ?? initialObjet);
   const [contenu, setContenu] = useState(initialBrouillon?.contenu ?? "");
   const [piecesExistantes, setPiecesExistantes] = useState<PieceJointe[]>(
     initialBrouillon?.piecesJointes ?? []
   );
+  const [fichiers, setFichiers] = useState<File[] | null>(null);
+  const [idBrouillon, setIdBrouillon] = useState<number | null>(
+    initialBrouillon?.idMess ?? null
+  );
+
+  // --- État UI ---
   const [erreur, setErreur] = useState("");
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
-
-  const champRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const listeRef = useRef<HTMLUListElement>(null);
-  const fichiersRef = useRef<HTMLInputElement>(null);
-  const [fichiers, setFichiers] = useState<FileList | null>(null);
-  const [pieceEnApercu, setPieceEnApercu] = useState<{
+  const [dateProgrammation, setDateProgrammation] = useState(() =>
+  dateLocalePourChamp(initialBrouillon?.dateEnvoiProgramme)
+);  const [pieceEnApercu, setPieceEnApercu] = useState<{
     nomFichier: string;
     typeMime: string;
     url: string;
   } | null>(null);
   const [chargementApercu, setChargementApercu] = useState<number | null>(null);
 
+  // --- Autocomplétion destinataires ---
+  const [saisie, setSaisie] = useState("");
+  const [suggestions, setSuggestions] = useState<UtilisateurRecherche[]>([]);
+  const [ouvert, setOuvert] = useState(false);
+  const [chargement, setChargement] = useState(false);
+  const [indexActif, setIndexActif] = useState(0);
+
+  // --- Refs ---
+  const champRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listeRef = useRef<HTMLUListElement>(null);
+  const fichiersRef = useRef<HTMLInputElement>(null);
+
   const idMessParent = initialBrouillon?.idMessParent ?? initialIdMessParent ?? null;
   const estReponse = idMessParent !== null;
   const estBrouillon = idBrouillon !== null;
 
+  // ---------------------------------------------------------
+  // Effets
+  // ---------------------------------------------------------
   useEffect(() => {
-    setDestinataires(creerDestinatairesInitiaux(initialBrouillon));
+    setDestinataires(creerDestinatairesInitiaux(initialBrouillon, initialDestinataire));
     setIdBrouillon(initialBrouillon?.idMess ?? null);
     setObjet(initialBrouillon?.objet ?? initialObjet);
     setContenu(initialBrouillon?.contenu ?? "");
     setPiecesExistantes(initialBrouillon?.piecesJointes ?? []);
     setFichiers(null);
-    setErreur("");
+    setDateProgrammation(dateLocalePourChamp(initialBrouillon?.dateEnvoiProgramme));    setErreur("");
     setPieceEnApercu(null);
     if (fichiersRef.current) fichiersRef.current.value = "";
-  }, [initialBrouillon, initialObjet]);
+  }, [initialBrouillon, initialDestinataire, initialObjet]);
 
   useEffect(() => {
     return () => {
@@ -123,7 +172,6 @@ export default function NouveauMessage({
 
   useEffect(() => {
     if (!ouvert) return;
-
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       setChargement(true);
@@ -137,7 +185,6 @@ export default function NouveauMessage({
         if (!controller.signal.aborted) setChargement(false);
       }
     }, 250);
-
     return () => {
       clearTimeout(timer);
       controller.abort();
@@ -159,6 +206,9 @@ export default function NouveauMessage({
     el?.scrollIntoView({ block: "nearest" });
   }, [indexActif, ouvert]);
 
+  // ---------------------------------------------------------
+  // Handlers destinataires
+  // ---------------------------------------------------------
   function choisir(utilisateur: UtilisateurRecherche) {
     setDestinataires((prev) => [...prev, utilisateur]);
     setSaisie("");
@@ -188,6 +238,9 @@ export default function NouveauMessage({
     }
   }
 
+  // ---------------------------------------------------------
+  // Persistance
+  // ---------------------------------------------------------
   function construireDonneesBrouillon(): BrouillonData {
     return {
       objet,
@@ -209,7 +262,6 @@ export default function NouveauMessage({
       await envoyerFichiers(resultat.idMess, fichiers);
       setFichiers(null);
       if (fichiersRef.current) fichiersRef.current.value = "";
-
       const brouillon = await getBrouillon(resultat.idMess);
       setPiecesExistantes(brouillon.piecesJointes);
       onBrouillonModifie();
@@ -220,6 +272,19 @@ export default function NouveauMessage({
 
   async function sauvegarderEtFermer() {
     setErreur("");
+    const estNouveauBrouillonVide =
+      idBrouillon === null &&
+      !objet.trim() &&
+      !contenu.trim() &&
+      destinataires.length === 0 &&
+      piecesExistantes.length === 0 &&
+      (fichiers?.length ?? 0) === 0;
+
+    if (estNouveauBrouillonVide) {
+      onClose();
+      return;
+    }
+
     setEnvoiEnCours(true);
     try {
       await enregistrerBrouillon();
@@ -231,21 +296,43 @@ export default function NouveauMessage({
     }
   }
 
-  async function fermer() {
-    const objetSaisi = estReponse
-      ? objet.trim() !== initialObjet.trim()
-      : objet.trim().length > 0;
-    const contientDesModifications =
-      idBrouillon !== null ||
-      objetSaisi ||
-      contenu.trim().length > 0 ||
-      destinataires.length > 0 ||
-      (fichiers?.length ?? 0) > 0;
+  async function programmerMessage() {
+    setErreur("");
 
-    if (contientDesModifications) {
-      await sauvegarderEtFermer();
-    } else {
+    if (!estReponse && destinataires.length === 0) {
+      setErreur("Choisissez au moins un destinataire dans la liste.");
+      return;
+    }
+    if (!estReponse && objet.trim().length === 0) {
+      setErreur("L'objet est obligatoire pour programmer l'envoi.");
+      return;
+    }
+    if (contenu.trim().length === 0) {
+      setErreur("Le contenu est obligatoire pour programmer l'envoi.");
+      return;
+    }
+    if (!dateProgrammation) {
+      setErreur("Choisissez une date et une heure d'envoi.");
+      return;
+    }
+
+    const date = new Date(dateProgrammation);
+    if (!Number.isFinite(date.getTime()) || date.getTime() < Date.now() + 60_000) {
+      setErreur("La date d'envoi doit être au moins une minute dans le futur.");
+      return;
+    }
+
+    setEnvoiEnCours(true);
+    try {
+      const idMess = await enregistrerBrouillon();
+      await programmerEnvoi(idMess, date);
+      onBrouillonModifie();
       onClose();
+      navigate("/messagerie/programmes");
+    } catch (err) {
+      setErreur(messageErreur(err));
+    } finally {
+      setEnvoiEnCours(false);
     }
   }
 
@@ -284,6 +371,28 @@ export default function NouveauMessage({
     }
   }
 
+
+  // Convertit une date ISO (UTC) en valeur compatible <input type="datetime-local">
+// (format "YYYY-MM-DDTHH:mm", sans fuseau)
+function dateLocalePourChamp(date: string | null | undefined): string {
+  if (!date) return "";
+  const valeur = new Date(date);
+  if (!Number.isFinite(valeur.getTime())) return "";
+  valeur.setMinutes(valeur.getMinutes() - valeur.getTimezoneOffset());
+  return valeur.toISOString().slice(0, 16);
+}
+
+// Borne min : 2 minutes dans le futur
+function dateMinimaleProgrammation(): string {
+  const date = new Date(Date.now() + 2 * 60_000);
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 16);
+}
+
+
+  // ---------------------------------------------------------
+  // Pièces jointes
+  // ---------------------------------------------------------
   async function supprimerBrouillon() {
     if (idBrouillon === null) return;
     if (!window.confirm("Supprimer ce brouillon ?")) return;
@@ -301,7 +410,6 @@ export default function NouveauMessage({
 
   async function supprimerPieceJointe(idPiece: number) {
     if (idBrouillon === null) return;
-
     setErreur("");
     setEnvoiEnCours(true);
     try {
@@ -325,49 +433,74 @@ export default function NouveauMessage({
         url: URL.createObjectURL(fichier),
       });
     } catch (err) {
-      setErreur(messageErreur(err));
+      setErreur(`Impossible de visualiser « ${piece.nomFichier} » : ${messageErreur(err)}`);
     } finally {
       setChargementApercu(null);
     }
+  }
+
+  function retirerFichierEnAttente(index: number) {
+    const fichiersMisAJour = (fichiers ?? []).filter((_, i) => i !== index);
+    setFichiers(fichiersMisAJour.length > 0 ? fichiersMisAJour : null);
+    if (fichiersRef.current) fichiersRef.current.value = "";
   }
 
   function fermerApercu() {
     setPieceEnApercu(null);
   }
 
-  return (
-    <div className="compose-overlay">
-      <div className="compose-window">
-        <div className="compose-header">
-          <h3>
-            {estBrouillon
-              ? "Modifier le brouillon"
-              : estReponse
-                ? "Répondre au message"
-                : "Nouveau message"}
-          </h3>
-          <button type="button" onClick={() => void fermer()} disabled={envoiEnCours}>
-            ×
-          </button>
-        </div>
+  // ---------------------------------------------------------
+  // Rendu
+  // ---------------------------------------------------------
+  const titre = estBrouillon
+    ? "Modifier le brouillon"
+    : estReponse
+      ? "Répondre au message"
+      : "Nouveau message";
 
-        <form onSubmit={(e) => void handleSubmit(e)}>
+  const libelleEnvoyer = envoiEnCours
+    ? "Enregistrement…"
+    : estBrouillon
+      ? "Envoyer le brouillon"
+      : "Envoyer";
+
+  return (
+    <div className="compose-overlay" role="dialog" aria-modal="true" aria-label={titre}>
+      <div className="compose-window">
+        {/* En-tête */}
+        <header className="compose-header">
+          <h3>{titre}</h3>
+          <button
+            type="button"
+            className="compose-close"
+            onClick={() => void sauvegarderEtFermer()}
+            disabled={envoiEnCours}
+            aria-label="Enregistrer et fermer"
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </header>
+
+        <form className="compose-form" onSubmit={(e) => void handleSubmit(e)}>
+          {/* Destinataires */}
           <div className="destinataires-wrapper" ref={champRef}>
             <div className="destinataires-champ" onClick={() => inputRef.current?.focus()}>
               {destinataires.map((d) => (
                 <span key={d.matricule} className="destinataire-chip" title={d.matricule}>
-                  {d.prenom ? `${d.prenom} ${d.nom}` : d.nom || d.matricule}
+                  <span className="destinataire-avatar">{initiales(d)}</span>
+                  <span className="destinataire-nom">
+                    {d.prenom ? `${d.prenom} ${d.nom}` : d.nom || d.matricule}
+                  </span>
                   <button
                     type="button"
                     onClick={() => retirer(d.matricule)}
                     aria-label={`Retirer ${d.prenom} ${d.nom}`}
                     disabled={envoiEnCours}
                   >
-                    ×
+                    <X size={12} aria-hidden="true" />
                   </button>
                 </span>
               ))}
-
               <input
                 ref={inputRef}
                 type="text"
@@ -411,12 +544,15 @@ export default function NouveauMessage({
                         }}
                         onMouseEnter={() => setIndexActif(i)}
                       >
-                        <span className="suggestion-nom">
-                          {u.prenom} {u.nom}
-                        </span>
-                        <span className="suggestion-detail">
-                          {u.matricule}
-                          {u.fonction ? ` · ${u.fonction}` : ""}
+                        <span className="suggestion-avatar">{initiales(u)}</span>
+                        <span className="suggestion-textes">
+                          <span className="suggestion-nom">
+                            {u.prenom} {u.nom}
+                          </span>
+                          <span className="suggestion-detail">
+                            {u.matricule}
+                            {u.fonction ? ` · ${u.fonction}` : ""}
+                          </span>
                         </span>
                       </li>
                     ))}
@@ -426,47 +562,95 @@ export default function NouveauMessage({
             )}
           </div>
 
-          <input
-            type="text"
-            placeholder="Objet"
-            value={objet}
-            onChange={(e) => setObjet(e.target.value)}
-            required={!estReponse}
-            disabled={estReponse || envoiEnCours}
-          />
-
-          <textarea
-            placeholder="Votre message..."
-            value={contenu}
-            onChange={(e) => setContenu(e.target.value)}
-            required
-            disabled={envoiEnCours}
-          />
-
-          <div className="compose-attachments">
+          {/* Objet */}
+          <div className="compose-field">
+            <label htmlFor="compose-objet">Objet</label>
             <input
-              ref={fichiersRef}
-              type="file"
-              multiple
-              onChange={(e) => setFichiers(e.target.files)}
+              id="compose-objet"
+              type="text"
+              placeholder="Objet du message"
+              value={objet}
+              onChange={(e) => setObjet(e.target.value)}
+              required={!estReponse}
+              disabled={estReponse || envoiEnCours}
+            />
+          </div>
+
+          {/* Contenu */}
+          <div className="compose-field compose-field--contenu">
+            <label htmlFor="compose-contenu">Message</label>
+            <textarea
+              id="compose-contenu"
+              placeholder="Écrivez votre message…"
+              value={contenu}
+              onChange={(e) => setContenu(e.target.value)}
+              required
               disabled={envoiEnCours}
             />
+          </div>
+
+          <div className="compose-field">
+            <label htmlFor="compose-date-programmation">Date d'envoi programmé</label>
+            <input
+              id="compose-date-programmation"
+              type="datetime-local"
+              min={dateMinimaleProgrammation()}
+              value={dateProgrammation}
+              onChange={(e) => setDateProgrammation(e.target.value)}
+              disabled={envoiEnCours}
+            />
+          </div>
+
+          {/* Pièces jointes */}
+          <div className="compose-attachments">
+            <div className="compose-attachments-header">
+              <span className="compose-attachments-title">Pièces jointes</span>
+              <label className="compose-attach-btn">
+                <Paperclip size={16} aria-hidden="true" />
+                Joindre un fichier
+                <input
+                  ref={fichiersRef}
+                  type="file"
+                  multiple
+                  onChange={(e) => {
+                    const selection = Array.from(e.target.files ?? []);
+                    setFichiers(selection.length > 0 ? selection : null);
+                  }}
+                  disabled={envoiEnCours}
+                />
+              </label>
+            </div>
+
             {fichiers && fichiers.length > 0 && (
-              <ul className="compose-existing-files" aria-label="Nouveaux fichiers sélectionnés">
+              <ul className="compose-file-list" aria-label="Nouveaux fichiers sélectionnés">
                 {Array.from(fichiers).map((fichier, index) => (
-                  <li key={`${fichier.name}-${index}`}>
-                    <span>{fichier.name}</span>
-                    <small>{formaterTaille(fichier.size)} · À joindre</small>
+                  <li key={`${fichier.name}-${index}`} className="compose-file compose-file--pending">
+                    <div className="compose-file-info">
+                      <span className="compose-file-name">{fichier.name}</span>
+                      <small>{formaterTaille(fichier.size)} · À joindre</small>
+                    </div>
+                    <div className="compose-file-actions">
+                      <button
+                        type="button"
+                        className="danger"
+                        onClick={() => retirerFichierEnAttente(index)}
+                        disabled={envoiEnCours}
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                        Retirer
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
             )}
+
             {piecesExistantes.length > 0 && (
-              <ul className="compose-existing-files" aria-label="Fichiers déjà joints au brouillon">
+              <ul className="compose-file-list" aria-label="Fichiers déjà joints">
                 {piecesExistantes.map((piece) => (
-                  <li key={piece.idPiece}>
+                  <li key={piece.idPiece} className="compose-file">
                     <div className="compose-file-info">
-                      <span>{piece.nomFichier}</span>
+                      <span className="compose-file-name">{piece.nomFichier}</span>
                       <small>{formaterTaille(piece.tailleFichier)}</small>
                     </div>
                     <div className="compose-file-actions">
@@ -475,13 +659,16 @@ export default function NouveauMessage({
                         onClick={() => void visualiserPieceJointe(piece)}
                         disabled={chargementApercu !== null || envoiEnCours}
                       >
-                        {chargementApercu === piece.idPiece ? "Chargement..." : "Visualiser"}
+                        <Eye size={14} aria-hidden="true" />
+                        {chargementApercu === piece.idPiece ? "Chargement…" : "Visualiser"}
                       </button>
                       <button
                         type="button"
+                        className="danger"
                         onClick={() => void supprimerPieceJointe(piece.idPiece)}
                         disabled={envoiEnCours}
                       >
+                        <Trash2 size={14} aria-hidden="true" />
                         Retirer
                       </button>
                     </div>
@@ -491,46 +678,61 @@ export default function NouveauMessage({
             )}
           </div>
 
-          <div className="compose-footer">
-            <button type="submit" className="compose-send" disabled={envoiEnCours}>
-              {envoiEnCours ? "Enregistrement..." : estBrouillon ? "Envoyer le brouillon" : "Envoyer"}
-            </button>
-            <button
-              type="button"
-              className="compose-save"
-              onClick={() => void sauvegarderEtFermer()}
-              disabled={envoiEnCours}
-            >
-              Enregistrer le brouillon
-            </button>
-            {estBrouillon && (
+          {/* Barre d'actions */}
+          <footer className="compose-footer">
+            {erreur && (
+              <span className="compose-error" role="alert">
+                {erreur}
+              </span>
+            )}
+            <div className="compose-actions">
+              <button type="submit" className="compose-send" disabled={envoiEnCours}>
+                <Send size={16} aria-hidden="true" />
+                {libelleEnvoyer}
+              </button>
               <button
                 type="button"
-                className="compose-discard"
-                onClick={() => void supprimerBrouillon()}
+                className="compose-schedule"
+                onClick={() => void programmerMessage()}
                 disabled={envoiEnCours}
               >
-                Supprimer
+                <CalendarClock size={16} aria-hidden="true" />
+                {initialBrouillon?.dateEnvoiProgramme
+                  ? "Mettre à jour la programmation"
+                  : "Programmer l'envoi"}
               </button>
-            )}
-            <button
-              type="button"
-              className="compose-discard"
-              onClick={() => void fermer()}
-              disabled={envoiEnCours}
-            >
-              Fermer
-            </button>
-            {erreur && <span className="compose-error">{erreur}</span>}
-          </div>
+              <button
+                type="button"
+                className="compose-save"
+                onClick={() => void sauvegarderEtFermer()}
+                disabled={envoiEnCours}
+              >
+                <Save size={16} aria-hidden="true" />
+                Enregistrer le brouillon
+              </button>
+              {estBrouillon && (
+                <button
+                  type="button"
+                  className="compose-discard"
+                  onClick={() => void supprimerBrouillon()}
+                  disabled={envoiEnCours}
+                >
+                  <Trash2 size={16} aria-hidden="true" />
+                  Supprimer
+                </button>
+              )}
+            </div>
+          </footer>
         </form>
+
+        {/* Aperçu pièce jointe */}
         {pieceEnApercu && (
           <div className="compose-preview-overlay" role="dialog" aria-modal="true">
             <section className="compose-preview">
               <header>
                 <strong title={pieceEnApercu.nomFichier}>{pieceEnApercu.nomFichier}</strong>
                 <button type="button" onClick={fermerApercu} aria-label="Fermer l'aperçu">
-                  ×
+                  <X size={18} aria-hidden="true" />
                 </button>
               </header>
               <div className="compose-preview-content">
@@ -542,11 +744,7 @@ export default function NouveauMessage({
                   <audio src={pieceEnApercu.url} controls />
                 ) : pieceEnApercu.typeMime === "application/pdf" ||
                   pieceEnApercu.typeMime.startsWith("text/") ? (
-                  <iframe
-                    src={pieceEnApercu.url}
-                    title={pieceEnApercu.nomFichier}
-                    sandbox=""
-                  />
+                  <iframe src={pieceEnApercu.url} title={pieceEnApercu.nomFichier} sandbox="" />
                 ) : (
                   <p>L'aperçu n'est pas disponible pour ce type de fichier.</p>
                 )}

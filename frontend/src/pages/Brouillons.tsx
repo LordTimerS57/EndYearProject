@@ -1,8 +1,21 @@
 import axios from "axios";
 import { useEffect, useState } from "react";
-import { getBrouillon, getBrouillons, type BrouillonListe } from "../services/messageService";
+import { FileText, MailOpen, PenLine } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import {
+  getBrouillon,
+  getBrouillons,
+  getConversation,
+  type BrouillonListe,
+  type ConversationDetail,
+} from "../services/messageService";
 import { useMessagerie } from "./MessagerieContext";
 import "./Brouillons.css";
+
+type ConversationBrouillon = {
+  conversation?: ConversationDetail;
+  erreur?: string;
+};
 
 function messageErreur(erreur: unknown): string {
   if (axios.isAxiosError<{ message?: string }>(erreur)) {
@@ -20,8 +33,10 @@ function afficherDate(date: string | null): string {
 }
 
 export default function Brouillons() {
+  const navigate = useNavigate();
   const { ouvrirNouveauMessage, ouvrirBrouillon, version } = useMessagerie();
   const [brouillons, setBrouillons] = useState<BrouillonListe[]>([]);
+  const [conversations, setConversations] = useState<Record<number, ConversationBrouillon>>({});
   const [chargement, setChargement] = useState(true);
   const [brouillonEnOuverture, setBrouillonEnOuverture] = useState<number | null>(null);
   const [erreur, setErreur] = useState("");
@@ -31,29 +46,65 @@ export default function Brouillons() {
     setChargement(true);
     setErreur("");
 
-    getBrouillons()
-      .then((data) => {
-        if (actif) setBrouillons(data);
-      })
-      .catch((err: unknown) => {
+    async function charger() {
+      try {
+        const data = await getBrouillons();
+        if (!actif) return;
+        setBrouillons(data);
+
+        const idsConversations = Array.from(
+          new Set(
+            data
+              .filter(
+                (brouillon) =>
+                  brouillon.idMessParent !== null && brouillon.idMessParent !== undefined
+              )
+              .map((brouillon) => brouillon.idConv)
+          )
+        );
+        const resultatConversations: Record<number, ConversationBrouillon> = {};
+
+        await Promise.all(
+          idsConversations.map(async (idConv) => {
+            try {
+              resultatConversations[idConv] = {
+                conversation: await getConversation(idConv),
+              };
+            } catch (err: unknown) {
+              resultatConversations[idConv] = { erreur: messageErreur(err) };
+            }
+          })
+        );
+
+        if (actif) setConversations(resultatConversations);
+      } catch (err: unknown) {
         if (actif) setErreur(messageErreur(err));
-      })
-      .finally(() => {
+      } finally {
         if (actif) setChargement(false);
-      });
+      }
+    }
+
+    void charger();
 
     return () => {
       actif = false;
     };
   }, [version]);
 
-  async function ouvrir(idMess: number) {
-    setBrouillonEnOuverture(idMess);
+  async function cliquerBrouillon(brouillon: BrouillonListe) {
+    setBrouillonEnOuverture(brouillon.idMess);
     setErreur("");
 
     try {
-      ouvrirBrouillon(await getBrouillon(idMess));
-    } catch (err) {
+      const detail = await getBrouillon(brouillon.idMess);
+      if (typeof detail.idMessParent === "number") {
+        navigate(`/messagerie/conversation/${detail.idConv}`, {
+          state: { depuisBrouillons: true },
+        });
+      } else {
+        ouvrirBrouillon(detail);
+      }
+    } catch (err: unknown) {
       setErreur(messageErreur(err));
     } finally {
       setBrouillonEnOuverture(null);
@@ -67,7 +118,10 @@ export default function Brouillons() {
           <h2>Brouillons</h2>
           <p>Les messages non envoyés sont enregistrés ici.</p>
         </div>
-        <button onClick={() => ouvrirNouveauMessage()}>Nouveau brouillon</button>
+        <button onClick={() => ouvrirNouveauMessage()}>
+          <PenLine size={16} aria-hidden="true" />
+          Nouveau brouillon
+        </button>
       </header>
 
       {erreur && <p className="mail-error" role="alert">{erreur}</p>}
@@ -78,32 +132,84 @@ export default function Brouillons() {
         <p className="mail-empty">Aucun brouillon enregistré.</p>
       ) : (
         <section className="drafts-list">
-          {brouillons.map((brouillon) => (
-            <button
-              type="button"
-              key={brouillon.idMess}
-              className="drafts-item"
-              onClick={() => void ouvrir(brouillon.idMess)}
-              disabled={brouillonEnOuverture !== null}
-            >
-              <span className="drafts-item-header">
-                <strong>{brouillon.objet || "(Sans objet)"}</strong>
-                <small>
-                  {brouillonEnOuverture === brouillon.idMess
-                    ? "Ouverture..."
-                    : afficherDate(brouillon.dateModification ?? brouillon.dateCreation)}
-                </small>
-              </span>
-              <span className="drafts-preview">{brouillon.apercu || "(Brouillon vide)"}</span>
-              <span className="drafts-meta">
-                À : {brouillon.destinataires.length > 0
-                  ? brouillon.destinataires.join(", ")
-                  : "aucun destinataire"}
-                {brouillon.nombrePiecesJointes > 0 &&
-                  ` · ${brouillon.nombrePiecesJointes} pièce(s) jointe(s)`}
-              </span>
-            </button>
-          ))}
+          {brouillons.map((brouillon) => {
+            const estReponse =
+              brouillon.idMessParent !== null && brouillon.idMessParent !== undefined;
+            const conversation = estReponse
+              ? conversations[brouillon.idConv]?.conversation
+              : undefined;
+            const erreurConversation = estReponse
+              ? conversations[brouillon.idConv]?.erreur
+              : undefined;
+            const messagesEnvoyes =
+              conversation?.messages.filter((message) => message.statut !== "Brouillon") ?? [];
+            const dernierMessage = messagesEnvoyes[messagesEnvoyes.length - 1];
+            const boutonClassName = estReponse
+              ? "mail-item drafts-conversation-item"
+              : "drafts-item";
+
+            return (
+              <button
+                type="button"
+                key={brouillon.idMess}
+                className={boutonClassName}
+                onClick={() => void cliquerBrouillon(brouillon)}
+                disabled={brouillonEnOuverture !== null}
+              >
+                <span className={estReponse ? "mail-item-top" : "drafts-item-header"}>
+                  <strong>
+                    {estReponse ? (
+                      <MailOpen size={16} aria-hidden="true" />
+                    ) : (
+                      <FileText size={16} aria-hidden="true" />
+                    )}
+                    {estReponse && <span className="drafts-reply-label">Brouillon</span>}
+                    {brouillon.objet || "(Sans objet)"}
+                    {estReponse && conversation && conversation.messages.length > 1 && (
+                      <span className="mail-count"> ({conversation.messages.length})</span>
+                    )}
+                  </strong>
+                  <small>
+                    {brouillonEnOuverture === brouillon.idMess
+                      ? "Ouverture..."
+                      : afficherDate(brouillon.dateModification ?? brouillon.dateCreation)}
+                  </small>
+                </span>
+                {estReponse ? (
+                  <>
+                    <span className="mail-subject">
+                      {dernierMessage
+                        ? `${dernierMessage.expediteur.prenom} ${dernierMessage.expediteur.nom}`
+                        : "Conversation"}
+                    </span>
+                    <p className="drafts-conversation-preview">
+                      {brouillon.apercu || "(Brouillon vide)"}
+                    </p>
+                    {erreurConversation && (
+                      <small className="drafts-conversation-error" role="alert">
+                        Conversation indisponible : {erreurConversation}
+                      </small>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <span className="drafts-preview">
+                      {brouillon.apercu || "(Brouillon vide)"}
+                    </span>
+                    <span className="drafts-meta">
+                      À : {brouillon.destinataires.length > 0
+                        ? brouillon.destinataires
+                            .map((d) => (d.prenom || d.nom ? `${d.prenom} ${d.nom}`.trim() : d.matricule))
+                            .join(", ")
+                        : "aucun destinataire"}
+                      {brouillon.nombrePiecesJointes > 0 &&
+                        ` · ${brouillon.nombrePiecesJointes} pièce(s) jointe(s)`}
+                    </span>
+                  </>
+                )}
+              </button>
+            );
+          })}
         </section>
       )}
     </section>

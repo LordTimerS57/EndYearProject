@@ -10,6 +10,7 @@ import MessagerieLayout from "./pages/MessagerieLayout";
 import ListeMessages from "./pages/ListeMessages";
 import LectureConversation from "./pages/LectureConversation";
 import Brouillons from "./pages/Brouillons";
+import Programmes from "./pages/Programmes";
 
 function Accueil() {
   return (
@@ -95,6 +96,7 @@ export default function App() {
           <Route path="archives" element={<ListeMessages dossier="archive" />} />
           <Route path="corbeille" element={<ListeMessages dossier="corbeille" />} />
           <Route path="brouillons" element={<Brouillons />} />
+          <Route path="programmes" element={<Programmes />} />
           <Route path="conversation/:idConv" element={<LectureConversation />} />
         </Route>
 

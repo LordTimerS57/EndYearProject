@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Download } from "lucide-react";
 import { telechargerFichierBlob } from "../services/messageService";
 import type { PieceJointe } from "../services/messageService";
 
@@ -93,8 +94,9 @@ export default function ApercuFichier({ piece }: Props) {
       {/* Bouton de téléchargement (toujours visible) */}
       <button 
         onClick={handleTelecharger}
-        style={{ marginTop: "10px", padding: "8px 12px", cursor: "pointer", backgroundColor: "#007bff", color: "white", border: "none", borderRadius: "4px" }}
+        style={{ display: "inline-flex", alignItems: "center", gap: "7px", marginTop: "10px", padding: "8px 12px", cursor: "pointer", backgroundColor: "#007bff", color: "white", border: "none", borderRadius: "4px" }}
       >
+        <Download size={16} aria-hidden="true" />
         Télécharger le fichier
       </button>
     </div>

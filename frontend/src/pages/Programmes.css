@@ -1,0 +1,83 @@
+.programmes-page > .mail-header p {
+  margin: 0.35rem 0 0;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.programmes-list {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.programme-item {
+  padding: 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.programme-item-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.programme-item-top strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  color: #17212f;
+}
+
+.programme-item-top time,
+.programme-attachments {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.programme-item .mail-subject {
+  margin-top: 0.5rem;
+}
+
+.programme-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.75rem;
+}
+
+.programme-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #fecaca;
+  border-radius: 7px;
+  background: #fef2f2;
+  color: #b91c1c;
+  cursor: pointer;
+}
+
+.programme-actions button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.programme-actions .programme-edit-button {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.programme-actions .programme-edit-button:hover:not(:disabled) {
+  border-color: #86efac;
+  background: #dcfce7;
+}
+
+@media (max-width: 600px) {
+  .programme-item-top {
+    flex-direction: column;
+  }
+}

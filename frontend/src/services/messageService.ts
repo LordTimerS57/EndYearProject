@@ -93,14 +93,21 @@ export interface UtilisateurRecherche {
   fonction: string;
 }
 
+export interface DestinataireDto {
+  matricule: string;
+  nom: string;
+  prenom: string;
+}
+
 export interface BrouillonListe {
   idMess: number;
   idConv: number;
+  idMessParent?: number | null;
   objet: string;
   apercu: string;
   dateModification: string | null;
   dateCreation: string | null;
-  destinataires: string[];
+  destinataires: DestinataireResume[];
   nombrePiecesJointes: number;
 }
 
@@ -109,9 +116,10 @@ export interface BrouillonDetail {
   idConv: number;
   objet: string;
   contenu: string;
-  matriculesDestinataires: string[];
+  destinataires: DestinataireResume[];
   idMessParent: number | null;
   piecesJointes: PieceJointe[];
+  dateEnvoiProgramme: string | null;
 }
 
 export interface BrouillonData {
@@ -279,7 +287,7 @@ export async function changerEtatConversation(idConv: number, etat: EtatCible): 
 // 5. PIÈCES JOINTES
 // ---------------------------------------------------------
 
-export async function envoyerFichiers(idMess: number, fichiers: FileList) {
+export async function envoyerFichiers(idMess: number, fichiers: FileList | File[]) {
   const formData = new FormData();
 
   Array.from(fichiers).forEach((fichier) => {
@@ -331,5 +339,41 @@ export async function getMessagesCorbeille(): Promise<MessageCorbeille[]> {
     throw new Error("La réponse de la corbeille est invalide.");
   }
 
+  return response.data;
+}
+
+
+export async function programmerEnvoi(idMess: number, date: Date): Promise<void> {
+  await axios.put(
+    `${API_URL}/messages/brouillons/${idMess}/programmation`,
+    { dateEnvoiProgramme: date.toISOString() },   // toujours en UTC
+    { headers: authHeaders() }
+  );
+}
+
+export async function annulerProgrammation(idMess: number): Promise<void> {
+  await axios.delete(`${API_URL}/messages/brouillons/${idMess}/programmation`, {
+    headers: authHeaders(),
+  });
+}
+
+export interface MessageProgramme {
+  idMess: number;
+  idConv: number;
+  idMessParent: number | null;
+  objet: string;
+  apercu: string;
+  dateEnvoiProgramme: string;
+  nombrePiecesJointes: number;
+  destinataires: { matricule: string; nom: string; prenom: string }[];
+}
+
+export async function getMessagesProgrammes(): Promise<MessageProgramme[]> {
+  const response = await axios.get<MessageProgramme[]>(`${API_URL}/messages/programmes`, {
+    headers: authHeaders(),
+  });
+  if (!Array.isArray(response.data)) {
+    throw new Error("La réponse des messages programmés est invalide.");
+  }
   return response.data;
 }

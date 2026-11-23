@@ -31,10 +31,30 @@
   cursor: wait;
 }
 
+.drafts-conversation-item {
+  position: relative;
+}
+
+.drafts-conversation-item:disabled {
+  cursor: wait;
+}
+
 .drafts-item-header {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+}
+
+.drafts-item-header strong,
+.drafts-conversation-item .mail-item-top strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.drafts-item-header strong svg,
+.drafts-conversation-item .mail-item-top strong svg {
+  flex-shrink: 0;
 }
 
 .drafts-item-header small,
@@ -48,4 +68,24 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.drafts-conversation-preview {
+  margin: 6px 0 0;
+  color: #666;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drafts-conversation-error {
+  display: block;
+  margin-top: 6px;
+  color: #b42318;
+}
+
+.drafts-reply-label {
+  margin-right: 8px;
+  color: #b42318;
+  font-weight: 600;
 }

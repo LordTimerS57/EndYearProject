@@ -1,6 +1,17 @@
 import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
+  Archive,
+  CalendarClock,
+  FileText,
+  GraduationCap,
+  Inbox,
+  LogOut,
+  PenLine,
+  Send,
+  Trash2,
+} from "lucide-react";
+import {
   creerBrouillon,
   envoyerBrouillon,
   envoyerMessage,
@@ -98,10 +109,22 @@ export default function MessagerieLayout() {
   return (
     <div className="mail-layout">
       <aside className="mail-sidebar">
-        <h2>Messagerie</h2>
+        <div className="mail-brand">
+          <div className="mail-brand-icon">
+            <GraduationCap size={34} aria-hidden="true" />
+          </div>
+          <div>
+            <h2>ENI</h2>
+            <span>Fianarantsoa</span>
+          </div>
+        </div>
+
+        <div className="mail-sidebar-divider" />
+        <div className="mail-menu-label">MESSAGERIE</div>
 
         <button className="mail-compose" onClick={() => contexte.ouvrirNouveauMessage()}>
-          + Nouveau message
+          <PenLine size={18} aria-hidden="true" />
+          <span>Nouveau message</span>
         </button>
 
         <nav>
@@ -109,37 +132,52 @@ export default function MessagerieLayout() {
             className={classeNav("reception")}
             onClick={() => navigate("/messagerie/reception")}
           >
+            <Inbox size={18} aria-hidden="true" />
             Boîte de réception
           </button>
           <button
             className={classeNav("envoyes")}
             onClick={() => navigate("/messagerie/envoyes")}
           >
+            <Send size={18} aria-hidden="true" />
             Messages envoyés
-          </button>          
+          </button>
           <button
             className={classeNav("archives")}
             onClick={() => navigate("/messagerie/archives")}
           >
+            <Archive size={18} aria-hidden="true" />
             Archives
           </button>
           <button
             className={classeNav("corbeille")}
             onClick={() => navigate("/messagerie/corbeille")}
           >
+            <Trash2 size={18} aria-hidden="true" />
             Corbeille
           </button>
           <button
             className={classeNav("brouillons")}
             onClick={() => navigate("/messagerie/brouillons")}
           >
+            <FileText size={18} aria-hidden="true" />
             Brouillons
+          </button>
+          <button
+            className={classeNav("programmes")}
+            onClick={() => navigate("/messagerie/programmes")}
+          >
+            <CalendarClock size={18} aria-hidden="true" />
+            Messages programmés
           </button>
         </nav>
 
-        <button className="mail-logout" onClick={deconnexion}>
-          Déconnexion
-        </button>
+        <div className="mail-sidebar-bottom">
+          <button className="mail-logout" onClick={deconnexion}>
+            <LogOut size={18} aria-hidden="true" />
+            <span>Déconnexion</span>
+          </button>
+        </div>
       </aside>
 
       <main className="mail-main">
@@ -158,6 +196,7 @@ export default function MessagerieLayout() {
           onBrouillonModifie={() => setVersion((v) => v + 1)}
           initialObjet={nouveauMessage.objet}
           initialIdMessParent={nouveauMessage.idMessParent}
+          initialDestinataire={nouveauMessage.initialDestinataire}
         />
       )}
     </div>
