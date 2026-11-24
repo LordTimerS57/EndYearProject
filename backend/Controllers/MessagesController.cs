@@ -16,11 +16,13 @@ public class MessagesController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly FileStorageService _fileStorage;
+    private readonly NotificationService _notificationService;
 
-    public MessagesController(AppDbContext context, FileStorageService fileStorage)
+    public MessagesController(AppDbContext context, FileStorageService fileStorage, NotificationService notificationService)
     {
         _context = context;
         _fileStorage = fileStorage;
+        _notificationService = notificationService;
     }
 
     private string? GetMatricule() =>
@@ -30,7 +32,6 @@ public class MessagesController : ControllerBase
     // 1. RÉCEPTION DES MESSAGES
     // ---------------------------------------------------------
    
-    // ---------------------------------------------------------
     [HttpGet("reception")]
     public async Task<IActionResult> Reception([FromQuery] string dossier = "boite", CancellationToken cancellationToken = default)
     {
@@ -348,6 +349,24 @@ public class MessagesController : ControllerBase
         // EF Core crée la Conversation (si nouvelle), puis le Message, puis les Recepteurs
         _context.Messages.Add(nouveauMessage);
         await _context.SaveChangesAsync(cancellationToken);
+
+        // Après : await _context.SaveChangesAsync(cancellationToken);
+
+        var expediteur = await _context.Utilisateurs
+            .Where(u => u.Matricule == matriculeExpediteur)
+            .Select(u => new { u.Prenom, u.Nom })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var nomComplet = expediteur is null
+            ? matriculeExpediteur
+            : $"{expediteur.Prenom} {expediteur.Nom}".Trim();
+
+        await _notificationService.NotifierNouveauMessage(
+            destinatairesValides,
+            nouveauMessage.IdMess,
+            conversationCible.IdConv,
+            conversationCible.Objet,
+            nomComplet);
 
         return Ok(new
         {
@@ -1022,16 +1041,15 @@ public class MessagesController : ControllerBase
     /// ou si le statut n'est plus Brouillon.
     /// </summary>
     private async Task<Message?> ChargerBrouillonAsync(
-        long idMess,
-        string matricule,
-        CancellationToken ct)
+    long idMess,
+    string matricule,
+    CancellationToken ct)
     {
         return await _context.Messages
             .Include(m => m.Conversation)
-            .Include(m => m.Recepteurs)
+            .Include(m => m.Recepteurs).ThenInclude(r => r.Utilisateur)  // ⬅️ ajout
             .Include(m => m.PiecesJointes)
-            .FirstOrDefaultAsync(m =>
-                m.IdMess == idMess
+            .FirstOrDefaultAsync(m => m.IdMess == idMess
                 && m.MatriculeExpediteur == matricule
                 && m.Statut == StatutMessage.Brouillon,
                 ct);
@@ -1148,19 +1166,26 @@ public class MessagesController : ControllerBase
         var brouillons = await _context.Messages
             .AsNoTracking()
             .Where(m => m.MatriculeExpediteur == matricule
-                     && m.Statut == StatutMessage.Brouillon)
+                     && m.Statut == StatutMessage.Brouillon
+                     && m.DateEnvoiProgramme == null)
             .OrderByDescending(m => m.DateModification ?? m.Conversation.DateCreation)
             .Select(m => new BrouillonListeDto
             {
                 IdMess = m.IdMess,
                 IdConv = m.IdConv,
+                IdMessParent = m.IdMessParent,
                 Objet = m.Conversation.Objet,
-                Apercu = m.Contenu.Length > 200
-                    ? m.Contenu.Substring(0, 200)
-                    : m.Contenu,
+                Apercu = m.Contenu.Length > 200 ? m.Contenu.Substring(0, 200) : m.Contenu,
                 DateModification = m.DateModification,
                 DateCreation = m.Conversation.DateCreation,
-                Destinataires = m.Recepteurs.Select(r => r.Matricule).ToList(),
+                Destinataires = m.Recepteurs
+                    .Select(r => new BrouillonDestinataireDto
+                    {
+                        Matricule = r.Matricule,
+                        Nom = r.Utilisateur.Nom,
+                        Prenom = r.Utilisateur.Prenom
+                    })
+                    .ToList(),
                 NombrePiecesJointes = m.PiecesJointes.Count
             })
             .ToListAsync(cancellationToken);
@@ -1171,8 +1196,8 @@ public class MessagesController : ControllerBase
 
     [HttpGet("brouillons/{idMess:long}")]
     public async Task<IActionResult> DetailBrouillon(
-    long idMess,
-    CancellationToken cancellationToken)
+     long idMess,
+     CancellationToken cancellationToken)
     {
         var matricule = GetMatricule();
         if (string.IsNullOrWhiteSpace(matricule))
@@ -1180,7 +1205,7 @@ public class MessagesController : ControllerBase
 
         var b = await ChargerBrouillonAsync(idMess, matricule, cancellationToken);
         if (b is null)
-            return NotFound(); // pas 403 : ne pas divulguer l'existence
+            return NotFound();
 
         var dto = new BrouillonDetailDto
         {
@@ -1188,8 +1213,16 @@ public class MessagesController : ControllerBase
             IdConv = b.IdConv,
             Objet = b.Conversation.Objet,
             Contenu = b.Contenu,
-            MatriculesDestinataires = b.Recepteurs.Select(r => r.Matricule).ToList(),
+            Destinataires = b.Recepteurs
+                .Select(r => new BrouillonDestinataireDto
+                {
+                    Matricule = r.Matricule,
+                    Nom = r.Utilisateur?.Nom ?? string.Empty,
+                    Prenom = r.Utilisateur?.Prenom ?? string.Empty
+                })
+                .ToList(),
             IdMessParent = b.IdMessParent,
+            DateEnvoiProgramme = b.DateEnvoiProgramme,
             PiecesJointes = b.PiecesJointes
                 .Select(p => new PieceJointeDto
                 {
@@ -1400,6 +1433,7 @@ public class MessagesController : ControllerBase
         brouillon.Statut = StatutMessage.Envoye;
         brouillon.DateEnvoi = DateTime.UtcNow;
         brouillon.DateModification = DateTime.UtcNow;
+        brouillon.DateEnvoiProgramme = null;
 
         try
         {
@@ -1460,5 +1494,388 @@ public class MessagesController : ControllerBase
         }
 
         return NoContent();
+    }
+
+
+    // À AJOUTER dans MessagesController (nouvelles méthodes, rien à remplacer ici).
+    // Les trois petites modifications des méthodes existantes sont décrites dans la réponse.
+
+    // ---------------------------------------------------------
+    // ENVOI PROGRAMMÉ
+    // Un message programmé est un BROUILLON qui possède une DateEnvoiProgramme.
+    // Le job EnvoiProgrammeJob l'envoie à l'heure prévue (statut Brouillon -> Envoyé).
+    // Tant qu'il est brouillon, personne d'autre ne le voit : tous vos filtres
+    // existants (Statut != Brouillon) continuent de fonctionner sans changement.
+    // ---------------------------------------------------------
+
+    public class ProgrammationDto
+    {
+        // Envoyer en UTC depuis le front : new Date(valeur).toISOString()
+        public DateTime DateEnvoiProgramme { get; set; }
+    }
+
+    private static DateTime NormaliserDateUtc(DateTime d) =>
+        d.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(d, DateTimeKind.Utc)
+            : d.ToUniversalTime();
+
+    // Mêmes règles que l'envoi immédiat d'un brouillon. Retourne null si tout est valide.
+    private async Task<IActionResult?> ValiderBrouillonPourEnvoiAsync(Message brouillon, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(brouillon.Contenu))
+            return BadRequest(new { message = "Le contenu est obligatoire pour programmer l'envoi." });
+
+        if (brouillon.IdMessParent is null && string.IsNullOrWhiteSpace(brouillon.Conversation.Objet))
+            return BadRequest(new { message = "L'objet est obligatoire pour programmer l'envoi." });
+
+        var destinataires = brouillon.Recepteurs
+            .Select(r => r.Matricule)
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .ToList();
+
+        if (destinataires.Count == 0)
+            return BadRequest(new { message = "Au moins un destinataire est requis." });
+
+        var existants = await _context.Utilisateurs
+            .Where(u => destinataires.Contains(u.Matricule))
+            .Select(u => u.Matricule)
+            .ToListAsync(ct);
+
+        var inconnus = destinataires.Except(existants, StringComparer.OrdinalIgnoreCase).ToList();
+        if (inconnus.Count > 0)
+            return BadRequest(new { message = "Destinataires inconnus.", inconnus });
+
+        return null;
+    }
+
+    // Programmer (ou reprogrammer) l'envoi d'un brouillon
+    [HttpPut("brouillons/{idMess:long}/programmation")]
+    public async Task<IActionResult> ProgrammerEnvoi(
+        long idMess,
+        [FromBody] ProgrammationDto dto,
+        CancellationToken cancellationToken)
+    {
+        var matricule = GetMatricule();
+        if (string.IsNullOrWhiteSpace(matricule))
+            return Unauthorized();
+
+        if (dto is null || dto.DateEnvoiProgramme == default)
+            return BadRequest(new { message = "La date d'envoi est obligatoire." });
+
+        var date = NormaliserDateUtc(dto.DateEnvoiProgramme);
+        var maintenant = DateTime.UtcNow;
+
+        if (date < maintenant.AddMinutes(1))
+            return BadRequest(new { message = "La date d'envoi doit être au moins une minute dans le futur." });
+
+        if (date > maintenant.AddYears(1))
+            return BadRequest(new { message = "La date d'envoi ne peut pas dépasser un an." });
+
+        var brouillon = await ChargerBrouillonAsync(idMess, matricule, cancellationToken);
+        if (brouillon is null)
+            return NotFound(new { message = "Brouillon introuvable (ou déjà envoyé)." });
+
+        var erreur = await ValiderBrouillonPourEnvoiAsync(brouillon, cancellationToken);
+        if (erreur is not null)
+            return erreur;
+
+        brouillon.DateEnvoiProgramme = date;
+        brouillon.DateModification = maintenant;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = "Envoi programmé.",
+            brouillon.IdMess,
+            brouillon.IdConv,
+            DateEnvoiProgramme = date
+        });
+    }
+
+    // Annuler la programmation : le message reste un brouillon ordinaire
+    [HttpDelete("brouillons/{idMess:long}/programmation")]
+    public async Task<IActionResult> AnnulerProgrammation(long idMess, CancellationToken cancellationToken)
+    {
+        var matricule = GetMatricule();
+        if (string.IsNullOrWhiteSpace(matricule))
+            return Unauthorized();
+
+        var brouillon = await ChargerBrouillonAsync(idMess, matricule, cancellationToken);
+        if (brouillon is null)
+            return NotFound(new { message = "Brouillon introuvable (ou déjà envoyé)." });
+
+        brouillon.DateEnvoiProgramme = null;
+        brouillon.DateModification = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return NoContent();
+    }
+
+    // Liste de mes messages programmés, du plus proche au plus lointain
+    [HttpGet("programmes")]
+    public async Task<IActionResult> ListeProgrammes(CancellationToken cancellationToken)
+    {
+        var matricule = GetMatricule();
+        if (string.IsNullOrWhiteSpace(matricule))
+            return Unauthorized();
+
+        var programmes = await _context.Messages
+            .AsNoTracking()
+            .Where(m => m.MatriculeExpediteur == matricule
+                        && m.Statut == StatutMessage.Brouillon
+                        && m.DateEnvoiProgramme != null)
+            .OrderBy(m => m.DateEnvoiProgramme)
+            .Select(m => new
+            {
+                m.IdMess,
+                m.IdConv,
+                m.IdMessParent,
+                Objet = m.Conversation.Objet,
+                Apercu = m.Contenu.Length > 200 ? m.Contenu.Substring(0, 200) : m.Contenu,
+                m.DateEnvoiProgramme,
+                Destinataires = m.Recepteurs.Select(r => r.Matricule).ToList(),
+                NombrePiecesJointes = m.PiecesJointes.Count
+            })
+            .ToListAsync(cancellationToken);
+
+        var matriculesDest = programmes.SelectMany(p => p.Destinataires).Distinct().ToList();
+        var noms = await _context.Utilisateurs
+            .AsNoTracking()
+            .Where(u => matriculesDest.Contains(u.Matricule))
+            .Select(u => new { u.Matricule, u.Nom, u.Prenom })
+            .ToDictionaryAsync(u => u.Matricule, cancellationToken);
+
+        var resultat = programmes.Select(p => new
+        {
+            p.IdMess,
+            p.IdConv,
+            p.IdMessParent,
+            p.Objet,
+            p.Apercu,
+            p.DateEnvoiProgramme,
+            p.NombrePiecesJointes,
+            Destinataires = p.Destinataires
+                .Select(d => noms.TryGetValue(d, out var u)
+                    ? new { Matricule = d, Nom = u.Nom, Prenom = u.Prenom }
+                    : new { Matricule = d, Nom = "", Prenom = "" })
+                .ToList()
+        });
+
+        return Ok(resultat);
+    }
+
+
+    [HttpGet("recherche")]
+    public async Task<IActionResult> Recherche(
+    [FromQuery] string? q,
+    [FromQuery] string? dossier = "boite",
+    [FromQuery] string? mode = null,
+    [FromQuery] DateOnly? dateDebut = null,
+    [FromQuery] DateOnly? dateFin = null,
+    [FromQuery] int page = 1,
+    [FromQuery] int taille = 25,
+    CancellationToken cancellationToken = default)
+    {
+        var matricule = GetMatricule();
+        if (string.IsNullOrWhiteSpace(matricule))
+            return Unauthorized();
+
+        // Bornes de sécurité
+        page = Math.Max(1, page);
+        taille = Math.Clamp(taille, 1, 100);
+
+        var dossierNorm = (dossier ?? "boite").Trim().ToLowerInvariant();
+        var requete = _context.Messages.AsNoTracking().AsQueryable();
+
+        // --- 1) Périmètre selon le dossier ---
+        switch (dossierNorm)
+        {
+            case "envoyes":
+                requete = requete.Where(m => m.MatriculeExpediteur == matricule
+                    && m.Statut != StatutMessage.Brouillon
+                    && _context.Messages.Any(i => i.IdConv == m.IdConv
+                        && i.IdMessParent == null
+                        && i.MatriculeExpediteur == matricule)
+                    && !_context.MessagesUtilisateur.Any(s =>
+                        s.IdMess == m.IdMess && s.Matricule == matricule));
+                break;
+
+            case "archive":
+                requete = requete.Where(m =>
+                    (m.MatriculeExpediteur == matricule
+                     || m.Recepteurs.Any(r => r.Matricule == matricule))
+                    && _context.MessagesUtilisateur.Any(s => s.IdMess == m.IdMess
+                        && s.Matricule == matricule && s.Etat == EtatMessage.Archive));
+                break;
+
+            case "corbeille":
+                var limite = DateTime.UtcNow.AddDays(-CorbeilleParametres.JoursRetention);
+                requete = requete.Where(m =>
+                    (m.MatriculeExpediteur == matricule
+                     || m.Recepteurs.Any(r => r.Matricule == matricule))
+                    && _context.MessagesUtilisateur.Any(s => s.IdMess == m.IdMess
+                        && s.Matricule == matricule && s.Etat == EtatMessage.Corbeille
+                        && s.DateEtat >= limite));
+                break;
+
+            case "brouillons":
+                requete = requete.Where(m => m.MatriculeExpediteur == matricule
+                    && m.Statut == StatutMessage.Brouillon
+                    && m.DateEnvoiProgramme == null);
+                break;
+
+            case "programmes":
+                requete = requete.Where(m => m.MatriculeExpediteur == matricule
+                    && m.Statut == StatutMessage.Brouillon
+                    && m.DateEnvoiProgramme != null);
+                break;
+
+            default: // boite
+                requete = requete.Where(m =>
+                    m.Recepteurs.Any(r => r.Matricule == matricule)
+                    && m.Statut != StatutMessage.Brouillon
+                    && !_context.MessagesUtilisateur.Any(s =>
+                        s.IdMess == m.IdMess && s.Matricule == matricule));
+                break;
+        }
+
+        // --- 2) Filtre texte : nom, prénom, matricule, objet, contenu ---
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var modeNorm = (mode ?? string.Empty).Trim().ToLowerInvariant();
+            var termes = q
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Take(5);
+
+            foreach (var terme in termes)
+            {
+                var motif = $"%{terme.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_")}%";
+                switch (modeNorm)
+                {
+                    case "nom":
+                        requete = dossierNorm is "brouillons" or "programmes"
+                            ? requete.Where(m => m.Recepteurs.Any(r =>
+                                EF.Functions.ILike(r.Utilisateur.Nom, motif) ||
+                                EF.Functions.ILike(r.Utilisateur.Prenom, motif)))
+                            : requete.Where(m =>
+                                EF.Functions.ILike(m.Expediteur.Nom, motif) ||
+                                EF.Functions.ILike(m.Expediteur.Prenom, motif) ||
+                                m.Recepteurs.Any(r =>
+                                    EF.Functions.ILike(r.Utilisateur.Nom, motif) ||
+                                    EF.Functions.ILike(r.Utilisateur.Prenom, motif)));
+                        break;
+
+                    case "matricule":
+                        requete = dossierNorm is "brouillons" or "programmes"
+                            ? requete.Where(m =>
+                                m.Recepteurs.Any(r => EF.Functions.ILike(r.Matricule, motif)))
+                            : requete.Where(m =>
+                                EF.Functions.ILike(m.MatriculeExpediteur, motif) ||
+                                m.Recepteurs.Any(r => EF.Functions.ILike(r.Matricule, motif)));
+                        break;
+
+                    case "objet":
+                        requete = dossierNorm == "programmes"
+                            ? requete.Where(m => EF.Functions.ILike(m.Conversation.Objet, motif))
+                            : requete.Where(m =>
+                                EF.Functions.ILike(m.Conversation.Objet, motif) ||
+                                EF.Functions.ILike(m.Contenu, motif));
+                        break;
+
+                    default:
+                        requete = requete.Where(m =>
+                            EF.Functions.ILike(m.Conversation.Objet, motif) ||
+                            EF.Functions.ILike(m.Contenu, motif) ||
+                            EF.Functions.ILike(m.Expediteur.Nom, motif) ||
+                            EF.Functions.ILike(m.Expediteur.Prenom, motif) ||
+                            EF.Functions.ILike(m.MatriculeExpediteur, motif) ||
+                            m.Recepteurs.Any(r =>
+                                EF.Functions.ILike(r.Matricule, motif) ||
+                                EF.Functions.ILike(r.Utilisateur.Nom, motif) ||
+                                EF.Functions.ILike(r.Utilisateur.Prenom, motif)));
+                        break;
+                }
+            }
+        }
+
+        // --- 3) Filtre date ---
+        // Convention : on filtre sur DateEnvoi quand il existe, sinon (brouillons)
+        // sur Conversation.DateCreation.
+        if (dateDebut.HasValue)
+        {
+            var debut = dateDebut.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            if (dossierNorm == "programmes")
+            {
+                requete = requete.Where(m => m.DateEnvoiProgramme >= debut);
+            }
+            else if (dossierNorm == "brouillons")
+            {
+                requete = requete.Where(m =>
+                    (m.DateModification ?? m.Conversation.DateCreation) >= debut);
+            }
+            else
+            {
+                requete = requete.Where(m =>
+                    (m.DateEnvoi != null && m.DateEnvoi >= debut)
+                    || (m.DateEnvoi == null && m.Conversation.DateCreation >= debut));
+            }
+        }
+        if (dateFin.HasValue)
+        {
+            var fin = dateFin.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+            if (dossierNorm == "programmes")
+            {
+                requete = requete.Where(m => m.DateEnvoiProgramme <= fin);
+            }
+            else if (dossierNorm == "brouillons")
+            {
+                requete = requete.Where(m =>
+                    (m.DateModification ?? m.Conversation.DateCreation) <= fin);
+            }
+            else
+            {
+                requete = requete.Where(m =>
+                    (m.DateEnvoi != null && m.DateEnvoi <= fin)
+                    || (m.DateEnvoi == null && m.Conversation.DateCreation <= fin));
+            }
+        }
+
+        // --- 4) Total + pagination ---
+        var total = await requete.CountAsync(cancellationToken);
+
+        var elements = await requete
+            .OrderByDescending(m => m.DateEnvoi ?? m.Conversation.DateCreation)
+            .Skip((page - 1) * taille)
+            .Take(taille)
+            .Select(m => new MessageRechercheDto
+            {
+                IdMess = m.IdMess,
+                IdConv = m.IdConv,
+                Objet = m.Conversation.Objet,
+                Contenu = m.Contenu,
+                DateEnvoi = m.DateEnvoi,
+                Statut = m.Statut,
+                MatriculeExpediteur = m.MatriculeExpediteur,
+                NomExpediteur = m.Expediteur.Nom,
+                PrenomExpediteur = m.Expediteur.Prenom,
+                Destinataires = m.Recepteurs
+                    .Select(r => new BrouillonDestinataireDto
+                    {
+                        Matricule = r.Matricule,
+                        Nom = r.Utilisateur.Nom,
+                        Prenom = r.Utilisateur.Prenom
+                    })
+                    .ToList(),
+                Dossier = dossierNorm
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(new RechercheMessagesResultatDto
+        {
+            Total = total,
+            Page = page,
+            Taille = taille,
+            Elements = elements
+        });
     }
 }

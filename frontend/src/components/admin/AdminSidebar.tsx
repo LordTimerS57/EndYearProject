@@ -6,13 +6,13 @@ import {
   UserPlus,
   LogOut,
 } from "lucide-react";
+import { supprimerSession } from "../../services/sessionService";
 
 export default function AdminSidebar() {
   const navigate = useNavigate();
 
   const handleLogout = () => {
-    sessionStorage.removeItem("token");
-    sessionStorage.removeItem("utilisateur");
+    supprimerSession();
     navigate("/", { replace: true });
   };
 

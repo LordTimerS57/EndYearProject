@@ -5,6 +5,7 @@ export interface OptionsNouveauMessage {
   objet?: string;
   idMessParent?: number;
   initialDestinataire?: DestinataireResume;
+  modeProgrammation?: boolean;
 }
 
 // Données partagées par le layout avec toutes les pages affichées dans <Outlet />

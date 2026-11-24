@@ -381,7 +381,8 @@ export async function getMessagesProgrammes(): Promise<MessageProgramme[]> {
 
 export interface RechercheMessagesParams {
   q?: string;
-  dossier?: Dossier | "brouillons";
+  dossier?: Dossier | "brouillons" | "programmes";
+  mode?: "nom" | "matricule" | "objet";
   dateDebut?: string;   // ISO "YYYY-MM-DD"
   dateFin?: string;
   page?: number;
@@ -417,4 +418,23 @@ export async function rechercherMessages(
     { params, headers: authHeaders() }
   );
   return response.data;
+}
+
+export async function rechercherTousMessages(
+  params: Omit<RechercheMessagesParams, "page" | "taille">
+): Promise<MessageRecherche[]> {
+  const taille = 100;
+  const premierePage = await rechercherMessages({ ...params, page: 1, taille });
+  const nombrePages = Math.ceil(premierePage.total / taille);
+
+  const pagesRestantes = await Promise.all(
+    Array.from({ length: Math.max(0, nombrePages - 1) }, (_, index) =>
+      rechercherMessages({ ...params, page: index + 2, taille })
+    )
+  );
+
+  return [
+    ...premierePage.elements,
+    ...pagesRestantes.flatMap((page) => page.elements),
+  ];
 }

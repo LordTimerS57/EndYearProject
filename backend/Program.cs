@@ -5,9 +5,11 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using backend.Data;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.SignalR;
 using backend.Services;
 using backend.Jobs;
 using Quartz;
+using backend.Hubs;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -63,6 +65,21 @@ builder.Services
                 RoleClaimType = "role",
                 NameClaimType = "sub"
             };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    path.StartsWithSegments("/hubs/notifications"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
@@ -97,9 +114,24 @@ builder.Services.AddQuartz(q =>
             .RepeatForever()
         )
     );
+
+    var envoiKey = new JobKey("EnvoiProgramme");
+    q.AddJob<EnvoiProgrammeJob>(o => o.WithIdentity(envoiKey));
+    q.AddTrigger(t => t
+        .ForJob(envoiKey)
+        .WithIdentity("EnvoiProgramme-trigger")
+        .StartNow()
+        .WithSimpleSchedule(s => s
+            .WithInterval(TimeSpan.FromMinutes(1))
+            .RepeatForever()));
 });
 
 builder.Services.AddQuartzHostedService(o => o.WaitForJobsToComplete = true);
+
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IUserIdProvider, NotificationUserIdProvider>();
+
+builder.Services.AddScoped<NotificationService>();
 
 var app = builder.Build();
 
@@ -115,6 +147,8 @@ app.UseCors("ReactFrontend");
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.MapHub<NotificationHub>("/hubs/notifications");
 
 app.MapControllers();
 

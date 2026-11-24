@@ -6,9 +6,10 @@ public class BrouillonDetailDto
     public long IdConv { get; set; }
     public string Objet { get; set; } = string.Empty;
     public string Contenu { get; set; } = string.Empty;
-    public List<string> MatriculesDestinataires { get; set; } = new();
+    public List<BrouillonDestinataireDto> Destinataires { get; set; } = new();
     public long? IdMessParent { get; set; }
     public List<PieceJointeDto> PiecesJointes { get; set; } = new();
+    public DateTime? DateEnvoiProgramme { get; set; }
 }
 
 public class PieceJointeDto

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Archive,
@@ -13,6 +13,7 @@ import {
   Search,
   Send,
   Trash2,
+  X,
 } from "lucide-react";
 import {
   creerBrouillon,
@@ -26,8 +27,23 @@ import {
   type EnvoyerMessageData,
 } from "../services/messageService";
 import NouveauMessage from "../components/NouveauMessage";
+import { supprimerSession } from "../services/sessionService";
 import type { MessagerieContext, OptionsNouveauMessage } from "./MessagerieContext";
 import "./BoiteReception.css";
+import {
+  useNotifications,
+  type NotificationRecue,
+} from "../hooks/useNotifications";
+
+function formaterDateNotification(date: string): string {
+  const valeur = new Date(date);
+  return Number.isNaN(valeur.getTime())
+    ? ""
+    : valeur.toLocaleString("fr-FR", {
+        dateStyle: "short",
+        timeStyle: "short",
+      });
+}
 
 // Layout : la sidebar reste fixe, seule la zone <Outlet /> change selon la page.
 export default function MessagerieLayout() {
@@ -40,6 +56,8 @@ export default function MessagerieLayout() {
   const [searchTerm, setSearchTerm] = useState("");
   const [searchMode, setSearchMode] = useState<"nom" | "matricule" | "objet">("objet");
   const [dateFilter, setDateFilter] = useState("");
+  const [notificationsOuvertes, setNotificationsOuvertes] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
 
   let utilisateur: {
     prenom?: string;
@@ -66,18 +84,52 @@ export default function MessagerieLayout() {
     setDateFilter("");
   }, [pathname]);
 
+  const notifications = useNotifications(() => {
+    setVersion((v) => v + 1); // rafraîchit la page courante
+  });
+
+  useEffect(() => {
+    if (!notificationsOuvertes) return;
+
+    function fermerSiExterieur(event: MouseEvent) {
+      if (
+        notificationsRef.current &&
+        !notificationsRef.current.contains(event.target as Node)
+      ) {
+        setNotificationsOuvertes(false);
+      }
+    }
+
+    function fermerAvecEchap(event: KeyboardEvent) {
+      if (event.key === "Escape") setNotificationsOuvertes(false);
+    }
+
+    document.addEventListener("mousedown", fermerSiExterieur);
+    document.addEventListener("keydown", fermerAvecEchap);
+    return () => {
+      document.removeEventListener("mousedown", fermerSiExterieur);
+      document.removeEventListener("keydown", fermerAvecEchap);
+    };
+  }, [notificationsOuvertes]);
+
   function fermerComposeur() {
     setNouveauMessage(null);
     setBrouillonInitial(null);
   }
 
   function deconnexion() {
-    sessionStorage.removeItem("token");
+    supprimerSession();
     navigate("/login", { replace: true });
   }
 
   function classeNav(chemin: string) {
     return pathname.startsWith(`/messagerie/${chemin}`) ? "mail-nav-active" : "";
+  }
+
+  function ouvrirNotification(notification: NotificationRecue) {
+    notifications.marquerCommeLue(notification.idMess);
+    setNotificationsOuvertes(false);
+    navigate(`/messagerie/conversation/${notification.idConv}`);
   }
 
   // ---------------------------------------------------------
@@ -256,8 +308,107 @@ export default function MessagerieLayout() {
           </div>
 
           <div className="mail-header-right">
-            <div className="mail-notification" aria-label="Notifications">
-              <Bell size={23} />
+            <div className="mail-notification-wrapper" ref={notificationsRef}>
+              <button
+                type="button"
+                className="mail-notification"
+                aria-label={
+                  notifications.nombreNonLues > 0
+                    ? `Notifications, ${notifications.nombreNonLues} non lue(s)`
+                    : "Notifications"
+                }
+                aria-haspopup="dialog"
+                aria-expanded={notificationsOuvertes}
+                onClick={() => setNotificationsOuvertes((ouverte) => !ouverte)}
+              >
+                <Bell size={23} aria-hidden="true" />
+                {notifications.nombreNonLues > 0 && (
+                  <span className="mail-notification-badge">
+                    {notifications.nombreNonLues > 99
+                      ? "99+"
+                      : notifications.nombreNonLues}
+                  </span>
+                )}
+              </button>
+
+              {notificationsOuvertes && (
+                <section
+                  className="mail-notification-panel"
+                  role="dialog"
+                  aria-label="Notifications"
+                >
+                  <div className="mail-notification-panel-header">
+                    <h2>Notifications</h2>
+                    <div>
+                      {notifications.nombreNonLues > 0 && (
+                        <button
+                          type="button"
+                          className="mail-notification-mark-all"
+                          onClick={notifications.marquerToutesCommeLues}
+                        >
+                          Tout marquer comme lu
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="mail-notification-close"
+                        aria-label="Fermer les notifications"
+                        onClick={() => setNotificationsOuvertes(false)}
+                      >
+                        <X size={17} aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {notifications.erreurConnexion && (
+                    <p className="mail-notification-error" role="alert">
+                      {notifications.erreurConnexion}
+                    </p>
+                  )}
+
+                  {notifications.notifications.length === 0 ? (
+                    <p className="mail-notification-empty">
+                      Aucune notification reçue.
+                    </p>
+                  ) : (
+                    <>
+                      <ul className="mail-notification-list">
+                        {notifications.notifications.map((notification) => (
+                          <li
+                            key={notification.idMess}
+                            className={
+                              notification.lue
+                                ? "mail-notification-item"
+                                : "mail-notification-item mail-notification-item-unread"
+                            }
+                          >
+                            <button
+                              type="button"
+                              onClick={() => ouvrirNotification(notification)}
+                            >
+                              <strong>
+                                {notification.expediteur || "Un utilisateur"} vous a envoyé
+                                un message
+                              </strong>
+                              <span>{notification.objet || "(Sans objet)"}</span>
+                              <time dateTime={notification.dateNotification}>
+                                {formaterDateNotification(notification.dateNotification)}
+                              </time>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                      <button
+                        type="button"
+                        className="mail-notification-clear"
+                        onClick={notifications.effacerNotifications}
+                      >
+                        Effacer les notifications
+                      </button>
+                    </>
+                  )}
+                </section>
+              )}
             </div>
 
             <div className="mail-header-divider" />
@@ -291,6 +442,7 @@ export default function MessagerieLayout() {
           initialObjet={nouveauMessage.objet}
           initialIdMessParent={nouveauMessage.idMessParent}
           initialDestinataire={nouveauMessage.initialDestinataire}
+          initialModeProgrammation={nouveauMessage.modeProgrammation}
         />
       )}
     </div>

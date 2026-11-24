@@ -57,6 +57,9 @@ namespace backend.Migrations
                     b.Property<DateTime?>("DateEnvoi")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("DateEnvoiProgramme")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("DateModification")
                         .HasColumnType("timestamp with time zone");
 
@@ -81,6 +84,8 @@ namespace backend.Migrations
                     b.HasIndex("IdMessParent");
 
                     b.HasIndex("MatriculeExpediteur");
+
+                    b.HasIndex("Statut", "DateEnvoiProgramme");
 
                     b.ToTable("Messages");
                 });

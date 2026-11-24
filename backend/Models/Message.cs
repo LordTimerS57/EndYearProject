@@ -10,6 +10,7 @@ public class Message
     public string Contenu { get; set; } = string.Empty;
     public DateTime? DateEnvoi { get; set; }
     public DateTime? DateModification { get; set; }
+    public DateTime? DateEnvoiProgramme { get; set; }   // UTC
     public string Statut { get; set; } = "Brouillon";
 
     public string MatriculeExpediteur { get; set; } = string.Empty;

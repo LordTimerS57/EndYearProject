@@ -263,9 +263,176 @@
 }
 
 .mail-notification {
+  position: relative;
   display: flex;
   align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
   color: #64748b;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.mail-notification:hover,
+.mail-notification:focus-visible {
+  background: #f1f5f9;
+  color: #14532d;
+}
+
+.mail-notification-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.mail-notification-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 13px;
+  text-align: center;
+}
+
+.mail-notification-panel {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: -12px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(480px, calc(100vh - 100px));
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+  color: #17212f;
+}
+
+.mail-notification-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.mail-notification-panel-header h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.mail-notification-panel-header > div {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.mail-notification-mark-all,
+.mail-notification-close,
+.mail-notification-clear {
+  border: 0;
+  background: transparent;
+  color: #166534;
+  cursor: pointer;
+}
+
+.mail-notification-mark-all {
+  padding: 0.35rem;
+  font-size: 0.75rem;
+}
+
+.mail-notification-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  color: #64748b;
+}
+
+.mail-notification-close:hover,
+.mail-notification-mark-all:hover,
+.mail-notification-clear:hover {
+  background: #f1f5f9;
+}
+
+.mail-notification-error,
+.mail-notification-empty {
+  margin: 0;
+  padding: 1rem;
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.mail-notification-error {
+  color: #b91c1c;
+}
+
+.mail-notification-list {
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.mail-notification-item {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.mail-notification-item button {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 0.3rem;
+  padding: 0.8rem 1rem;
+  border: 0;
+  background: #fff;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.mail-notification-item button:hover {
+  background: #f8fafc;
+}
+
+.mail-notification-item-unread button {
+  background: #f0fdf4;
+}
+
+.mail-notification-item strong {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.mail-notification-item span,
+.mail-notification-item time {
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.mail-notification-clear {
+  flex-shrink: 0;
+  padding: 0.7rem 1rem;
+  border-top: 1px solid #e2e8f0;
+  font-size: 0.82rem;
+  text-align: left;
 }
 
 .mail-header-divider {
@@ -463,8 +630,7 @@
   }
 
   .mail-profile-info,
-  .mail-header-divider,
-  .mail-notification {
+  .mail-header-divider {
     display: none;
   }
 

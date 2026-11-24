@@ -4,6 +4,23 @@
   font-size: 0.9rem;
 }
 
+.programmes-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.programmes-header-actions .programme-new-button {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.programmes-header-actions .programme-new-button:hover {
+  border-color: #4ade80;
+  background: #dcfce7;
+}
+
 .programmes-list {
   display: grid;
   gap: 0.75rem;
@@ -77,6 +94,16 @@
 }
 
 @media (max-width: 600px) {
+  .programmes-page > .mail-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .programmes-header-actions {
+    width: 100%;
+  }
+
   .programme-item-top {
     flex-direction: column;
   }

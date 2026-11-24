@@ -33,6 +33,7 @@ interface Props {
   initialIdMessParent?: number;
   initialDestinataire?: DestinataireResume;
   initialBrouillon?: BrouillonDetail;
+  initialModeProgrammation?: boolean;
 }
 
 // ---------------------------------------------------------
@@ -99,6 +100,7 @@ export default function NouveauMessage({
   initialIdMessParent,
   initialDestinataire,
   initialBrouillon,
+  initialModeProgrammation = false,
 }: Props) {
   const navigate = useNavigate();
 
@@ -144,6 +146,8 @@ export default function NouveauMessage({
   const idMessParent = initialBrouillon?.idMessParent ?? initialIdMessParent ?? null;
   const estReponse = idMessParent !== null;
   const estBrouillon = idBrouillon !== null;
+  const modeProgrammation =
+    initialModeProgrammation || Boolean(initialBrouillon?.dateEnvoiProgramme);
 
   // ---------------------------------------------------------
   // Effets
@@ -274,11 +278,10 @@ export default function NouveauMessage({
     setErreur("");
     const estNouveauBrouillonVide =
       idBrouillon === null &&
-      !objet.trim() &&
       !contenu.trim() &&
-      destinataires.length === 0 &&
       piecesExistantes.length === 0 &&
-      (fichiers?.length ?? 0) === 0;
+      (fichiers?.length ?? 0) === 0 &&
+      (estReponse || (!objet.trim() && destinataires.length === 0));
 
     if (estNouveauBrouillonVide) {
       onClose();
@@ -456,7 +459,9 @@ function dateMinimaleProgrammation(): string {
     ? "Modifier le brouillon"
     : estReponse
       ? "Répondre au message"
-      : "Nouveau message";
+      : modeProgrammation
+        ? "Nouveau message programmé"
+        : "Nouveau message";
 
   const libelleEnvoyer = envoiEnCours
     ? "Enregistrement…"
@@ -589,17 +594,19 @@ function dateMinimaleProgrammation(): string {
             />
           </div>
 
-          <div className="compose-field">
-            <label htmlFor="compose-date-programmation">Date d'envoi programmé</label>
-            <input
-              id="compose-date-programmation"
-              type="datetime-local"
-              min={dateMinimaleProgrammation()}
-              value={dateProgrammation}
-              onChange={(e) => setDateProgrammation(e.target.value)}
-              disabled={envoiEnCours}
-            />
-          </div>
+          {modeProgrammation && (
+            <div className="compose-field">
+              <label htmlFor="compose-date-programmation">Date d'envoi programmé</label>
+              <input
+                id="compose-date-programmation"
+                type="datetime-local"
+                min={dateMinimaleProgrammation()}
+                value={dateProgrammation}
+                onChange={(e) => setDateProgrammation(e.target.value)}
+                disabled={envoiEnCours}
+              />
+            </div>
+          )}
 
           {/* Pièces jointes */}
           <div className="compose-attachments">
@@ -686,21 +693,25 @@ function dateMinimaleProgrammation(): string {
               </span>
             )}
             <div className="compose-actions">
-              <button type="submit" className="compose-send" disabled={envoiEnCours}>
-                <Send size={16} aria-hidden="true" />
-                {libelleEnvoyer}
-              </button>
-              <button
-                type="button"
-                className="compose-schedule"
-                onClick={() => void programmerMessage()}
-                disabled={envoiEnCours}
-              >
-                <CalendarClock size={16} aria-hidden="true" />
-                {initialBrouillon?.dateEnvoiProgramme
-                  ? "Mettre à jour la programmation"
-                  : "Programmer l'envoi"}
-              </button>
+              {!modeProgrammation && (
+                <button type="submit" className="compose-send" disabled={envoiEnCours}>
+                  <Send size={16} aria-hidden="true" />
+                  {libelleEnvoyer}
+                </button>
+              )}
+              {modeProgrammation && (
+                <button
+                  type="button"
+                  className="compose-schedule"
+                  onClick={() => void programmerMessage()}
+                  disabled={envoiEnCours}
+                >
+                  <CalendarClock size={16} aria-hidden="true" />
+                  {initialBrouillon?.dateEnvoiProgramme
+                    ? "Mettre à jour la programmation"
+                    : "Programmer l'envoi"}
+                </button>
+              )}
               <button
                 type="button"
                 className="compose-save"

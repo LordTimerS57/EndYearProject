@@ -8,6 +8,7 @@ import {
   type MessageProgramme,
 } from "../services/messageService";
 import { useMessagerie } from "./MessagerieContext";
+import { useRechercheMessages } from "./useRechercheMessages";
 import "./Programmes.css";
 
 function messageErreur(erreur: unknown): string {
@@ -25,7 +26,20 @@ function afficherDate(date: string): string {
 }
 
 export default function Programmes() {
-  const { ouvrirBrouillon, version, searchTerm, searchMode, dateFilter } = useMessagerie();
+  const {
+    ouvrirNouveauMessage,
+    ouvrirBrouillon,
+    version,
+    searchTerm,
+    searchMode,
+    dateFilter,
+  } = useMessagerie();
+  const recherche = useRechercheMessages({
+    q: searchTerm,
+    mode: searchMode,
+    dossier: "programmes",
+    dateFilter,
+  });
   const [messages, setMessages] = useState<MessageProgramme[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
@@ -84,31 +98,13 @@ export default function Programmes() {
     }
   }
 
-  const terme = searchTerm.trim().toLowerCase();
-  const messagesFiltres = messages.filter((message) => {
-    const noms = message.destinataires
-      .map((destinataire) => `${destinataire.prenom} ${destinataire.nom}`)
-      .join(" ");
-    const matricules = message.destinataires
-      .map((destinataire) => destinataire.matricule)
-      .join(" ");
-
-    const correspondRecherche = !terme
-      ? true
-      : searchMode === "nom"
-        ? noms.toLowerCase().includes(terme)
-        : searchMode === "matricule"
-          ? matricules.toLowerCase().includes(terme)
-          : message.objet.toLowerCase().includes(terme);
-
-    const correspondDate = !dateFilter
-      ? true
-      : message.dateEnvoiProgramme
-        ? new Date(message.dateEnvoiProgramme).toISOString().slice(0, 10) === dateFilter
-        : false;
-
-    return correspondRecherche && correspondDate;
-  });
+  const idsMessagesCorrespondants = new Set(
+    recherche.resultats?.map((resultat) => resultat.idMess) ?? []
+  );
+  const messagesFiltres = messages.filter(
+    (message) =>
+      !recherche.active || idsMessagesCorrespondants.has(message.idMess)
+  );
 
   return (
     <section className="programmes-page">
@@ -117,16 +113,31 @@ export default function Programmes() {
           <h2>Messages programmés</h2>
           <p>Les messages seront envoyés à la date prévue.</p>
         </div>
-        <button type="button" onClick={() => setRecharge((valeur) => valeur + 1)}>
-          <RefreshCw size={16} aria-hidden="true" />
-          Actualiser
-        </button>
+        <div className="programmes-header-actions">
+          <button
+            type="button"
+            className="programme-new-button"
+            onClick={() => ouvrirNouveauMessage({ modeProgrammation: true })}
+          >
+            <CalendarClock size={16} aria-hidden="true" />
+            Nouveau message programmé
+          </button>
+          <button type="button" onClick={() => setRecharge((valeur) => valeur + 1)}>
+            <RefreshCw size={16} aria-hidden="true" />
+            Actualiser
+          </button>
+        </div>
       </header>
 
       {erreur && <p className="mail-error" role="alert">{erreur}</p>}
+      {recherche.erreur && <p className="mail-error" role="alert">{recherche.erreur}</p>}
 
-      {chargement ? (
-        <p className="mail-empty">Chargement des messages programmés...</p>
+      {chargement || recherche.chargement ? (
+        <p className="mail-empty">
+          {recherche.chargement
+            ? "Recherche des messages programmés..."
+            : "Chargement des messages programmés..."}
+        </p>
       ) : messagesFiltres.length === 0 ? (
         <p className="mail-empty">
           {messages.length === 0

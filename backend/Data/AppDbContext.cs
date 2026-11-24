@@ -49,6 +49,9 @@ public class AppDbContext : DbContext
             .HasForeignKey(r => r.IdMess)
             .OnDelete(DeleteBehavior.Cascade);
 
+        modelBuilder.Entity<Message>()
+            .HasIndex(m => new { m.Statut, m.DateEnvoiProgramme });
+
         // Utilisateur -> Recepteur
         modelBuilder.Entity<Recepteur>()
             .HasOne(r => r.Utilisateur)

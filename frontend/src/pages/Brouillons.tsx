@@ -1,15 +1,17 @@
 import axios from "axios";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FileText, MailOpen, PenLine } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   getBrouillon,
   getBrouillons,
   getConversation,
+  getMessagesProgrammes,
   type BrouillonListe,
   type ConversationDetail,
 } from "../services/messageService";
 import { useMessagerie } from "./MessagerieContext";
+import { useRechercheMessages } from "./useRechercheMessages";
 import "./Brouillons.css";
 
 type ConversationBrouillon = {
@@ -42,6 +44,12 @@ export default function Brouillons() {
     searchMode,
     dateFilter,
   } = useMessagerie();
+  const recherche = useRechercheMessages({
+    q: searchTerm,
+    mode: searchMode,
+    dossier: "brouillons",
+    dateFilter,
+  });
   const [brouillons, setBrouillons] = useState<BrouillonListe[]>([]);
   const [conversations, setConversations] = useState<Record<number, ConversationBrouillon>>({});
   const [chargement, setChargement] = useState(true);
@@ -55,13 +63,22 @@ export default function Brouillons() {
 
     async function charger() {
       try {
-        const data = await getBrouillons();
+        const [data, messagesProgrammes] = await Promise.all([
+          getBrouillons(),
+          getMessagesProgrammes(),
+        ]);
         if (!actif) return;
-        setBrouillons(data);
+        const idsMessagesProgrammes = new Set(
+          messagesProgrammes.map((message) => message.idMess)
+        );
+        const brouillonsDisponibles = data.filter(
+          (brouillon) => !idsMessagesProgrammes.has(brouillon.idMess)
+        );
+        setBrouillons(brouillonsDisponibles);
 
         const idsConversations = Array.from(
           new Set(
-            data
+            brouillonsDisponibles
               .filter(
                 (brouillon) =>
                   brouillon.idMessParent !== null && brouillon.idMessParent !== undefined
@@ -118,32 +135,14 @@ export default function Brouillons() {
     }
   }
 
-  const terme = searchTerm.trim().toLowerCase();
-  const brouillonsFiltres = brouillons.filter((brouillon) => {
-    const noms = brouillon.destinataires
-      .map((destinataire) => `${destinataire.prenom} ${destinataire.nom}`)
-      .join(" ");
-    const matricules = brouillon.destinataires
-      .map((destinataire) => destinataire.matricule)
-      .join(" ");
-
-    const correspondRecherche = !terme
-      ? true
-      : searchMode === "nom"
-        ? noms.toLowerCase().includes(terme)
-        : searchMode === "matricule"
-          ? matricules.toLowerCase().includes(terme)
-          : `${brouillon.objet} ${brouillon.apercu}`.toLowerCase().includes(terme);
-
-    const dateBrouillon = brouillon.dateModification ?? brouillon.dateCreation;
-    const correspondDate = !dateFilter
-      ? true
-      : dateBrouillon
-        ? new Date(dateBrouillon).toISOString().slice(0, 10) === dateFilter
-        : false;
-
-    return correspondRecherche && correspondDate;
-  });
+  const idsBrouillonsCorrespondants = useMemo(
+    () => new Set(recherche.resultats?.map((resultat) => resultat.idMess) ?? []),
+    [recherche.resultats]
+  );
+  const brouillonsFiltres = brouillons.filter(
+    (brouillon) =>
+      !recherche.active || idsBrouillonsCorrespondants.has(brouillon.idMess)
+  );
 
   return (
     <section className="drafts-page">
@@ -159,9 +158,12 @@ export default function Brouillons() {
       </header>
 
       {erreur && <p className="mail-error" role="alert">{erreur}</p>}
+      {recherche.erreur && <p className="mail-error" role="alert">{recherche.erreur}</p>}
 
-      {chargement ? (
-        <p className="mail-empty">Chargement des brouillons...</p>
+      {chargement || recherche.chargement ? (
+        <p className="mail-empty">
+          {recherche.chargement ? "Recherche des brouillons..." : "Chargement des brouillons..."}
+        </p>
       ) : brouillonsFiltres.length === 0 ? (
         <p className="mail-empty">
           {brouillons.length === 0

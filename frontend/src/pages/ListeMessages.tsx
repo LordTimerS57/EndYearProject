@@ -7,6 +7,7 @@ import {
   type MessageListe,
 } from "../services/messageService";
 import { useMessagerie } from "./MessagerieContext";
+import { useRechercheMessages } from "./useRechercheMessages";
 
 const TITRES: Record<Dossier, string> = {
   boite: "Boîte de réception",
@@ -37,6 +38,12 @@ interface Props {
 export default function ListeMessages({ dossier = "boite" }: Props) {
   const navigate = useNavigate();
   const { version, searchTerm, searchMode, dateFilter } = useMessagerie();
+  const recherche = useRechercheMessages({
+    q: searchTerm,
+    mode: searchMode,
+    dossier,
+    dateFilter,
+  });
 
   const [messages, setMessages] = useState<MessageListe[]>([]);
   const [chargement, setChargement] = useState(true);
@@ -106,35 +113,15 @@ export default function ListeMessages({ dossier = "boite" }: Props) {
     }
 
     const liste = Array.from(map.values());
-    const terme = searchTerm.trim().toLowerCase();
+    const idsConversationsRecherchees = new Set(
+      recherche.resultats?.map((resultat) => resultat.idConv) ?? []
+    );
 
-    return liste.filter(({ dernier }) => {
-      const nom = `${dernier.expediteur.prenom} ${dernier.expediteur.nom}`.trim();
-      const matricule = dernier.expediteur.matricule;
-      const destinatairesNoms = dernier.destinataires
-        .map((destinataire) => `${destinataire.prenom} ${destinataire.nom}`)
-        .join(" ");
-      const destinatairesMatricules = dernier.destinataires
-        .map((destinataire) => destinataire.matricule)
-        .join(" ");
-
-      const correspondRecherche = !terme
-        ? true
-        : searchMode === "nom"
-          ? `${nom} ${destinatairesNoms}`.toLowerCase().includes(terme)
-          : searchMode === "matricule"
-            ? `${matricule} ${destinatairesMatricules}`.toLowerCase().includes(terme)
-            : `${dernier.objet} ${dernier.contenu}`.toLowerCase().includes(terme);
-
-      const correspondDate = !dateFilter
-        ? true
-        : dernier.dateEnvoi
-          ? new Date(dernier.dateEnvoi).toISOString().slice(0, 10) === dateFilter
-          : false;
-
-      return correspondRecherche && correspondDate;
-    });
-  }, [messages, searchTerm, searchMode, dateFilter]);
+    return liste.filter(
+      ({ idConv }) =>
+        !recherche.active || idsConversationsRecherchees.has(idConv)
+    );
+  }, [messages, recherche.active, recherche.resultats]);
 
   function formaterCompteARebours(expireLe: string | null) {
     if (!expireLe) return "Échéance de suppression indisponible";
@@ -168,9 +155,12 @@ export default function ListeMessages({ dossier = "boite" }: Props) {
       </header>
 
       {erreur && <p className="mail-error">{erreur}</p>}
+      {recherche.erreur && <p className="mail-error" role="alert">{recherche.erreur}</p>}
 
-      {chargement ? (
-        <p className="mail-empty">Chargement des messages...</p>
+      {chargement || recherche.chargement ? (
+        <p className="mail-empty">
+          {recherche.chargement ? "Recherche des messages..." : "Chargement des messages..."}
+        </p>
       ) : conversations.length === 0 ? (
         <p className="mail-empty">{MESSAGES_VIDES[dossier]}</p>
       ) : (
@@ -180,7 +170,9 @@ export default function ListeMessages({ dossier = "boite" }: Props) {
               key={idConv}
               className={
                 "mail-item " +
-                (dossier !== "envoyes" &&
+                (dossier === "boite" && dernier.statut === "Lu"
+                  ? "mail-read"
+                  : dossier !== "envoyes" &&
                 dossier !== "corbeille" &&
                 dernier.statut !== "Lu"
                   ? "mail-unread"

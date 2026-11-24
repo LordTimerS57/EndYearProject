@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import Login from "./pages/Login";
 import Inscription from "./pages/Inscription";
 import AdminLayout from "./components/admin/AdminLayout";
@@ -11,6 +11,11 @@ import ListeMessages from "./pages/ListeMessages";
 import LectureConversation from "./pages/LectureConversation";
 import Brouillons from "./pages/Brouillons";
 import Programmes from "./pages/Programmes";
+import {
+  obtenirExpirationJeton,
+  redirigerVersConnexion,
+  supprimerSession,
+} from "./services/sessionService";
 
 function Accueil() {
   return (
@@ -24,8 +29,8 @@ function Accueil() {
         <button
           className="auth-button"
           onClick={() => {
-            sessionStorage.removeItem("token");
-            window.location.href = "/login";
+            supprimerSession();
+            window.location.replace("/login");
           }}
         >
           Se déconnecter
@@ -36,18 +41,52 @@ function Accueil() {
 }
 
 function RouteProtegee({ children }: { children: ReactNode }) {
-  return sessionStorage.getItem("token") ? (
-    <>{children}</>
-  ) : (
-    <Navigate to="/login" replace />
-  );
+  const token = sessionStorage.getItem("token");
+  const expiration = token ? obtenirExpirationJeton(token) : null;
+  const sessionValide =
+    token !== null && expiration !== null && expiration > Date.now();
+
+  useEffect(() => {
+    if (!token) return;
+
+    if (expiration === null || expiration <= Date.now()) {
+      supprimerSession();
+      return;
+    }
+
+    const verifierExpiration = () => {
+      if (Date.now() >= expiration) redirigerVersConnexion();
+    };
+    const timer = window.setTimeout(
+      verifierExpiration,
+      expiration - Date.now()
+    );
+
+    window.addEventListener("focus", verifierExpiration);
+    document.addEventListener("visibilitychange", verifierExpiration);
+
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", verifierExpiration);
+      document.removeEventListener("visibilitychange", verifierExpiration);
+    };
+  }, [token, expiration]);
+
+  return sessionValide ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/admin" element={<AdminLayout />}>
+        <Route
+          path="/admin"
+          element={
+            <RouteProtegee>
+              <AdminLayout />
+            </RouteProtegee>
+          }
+        >
   <Route
     index
     element={<Navigate to="/admin/dashboard" replace />}
@@ -106,14 +145,6 @@ export default function App() {
           element={<Navigate to="/messagerie/reception" replace />}
         />
 
-        <Route
-          path="/admin/utilisateurs"
-          element={
-            <RouteProtegee>
-              <AdminUtilisateurs />
-            </RouteProtegee>
-          }
-        />
       </Routes>
     </BrowserRouter>
   );
